@@ -1,0 +1,16 @@
+# 本地真实配置（绝不提交）
+module-test/references/project-profile.md
+module-test/references/test-accounts.csv
+module-test/references/code-owners.json
+module-test/references/setup-status.md
+
+# 产物
+dist/
+.codebuddy/selftest/
+tmp/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/

@@ -1,0 +1,21 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate skill metadata
+        run: python tests/validate_skill.py
+      - name: Smoke test
+        run: python tests/smoke_test.py
+      - name: Sanitize check
+        shell: pwsh
+        run: ./scripts/sanitize_check.ps1

@@ -1,0 +1,81 @@
+import importlib.util
+import os
+import pathlib
+import re
+import subprocess
+import sys
+
+sys.dont_write_bytecode = True
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+SKILL_DIR = ROOT / "module-test"
+SKILL_MD = SKILL_DIR / "SKILL.md"
+
+
+def load_module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_frontmatter():
+    text = SKILL_MD.read_text(encoding="utf-8")
+    assert text.startswith("---")
+    match = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
+    assert match, "invalid frontmatter"
+    front = match.group(1)
+    assert "name: module-test" in front
+    assert "description:" in front
+    assert "<" not in front.split("description:", 1)[1].splitlines()[0]
+
+
+def test_html_report_renders_offline():
+    mod = load_module("report_html", SKILL_DIR / "scripts" / "report_html.py")
+    header = {
+        "结论": "有条件通过",
+        "范围": "示例模块",
+        "需求来源": "用户口述",
+        "需求确认": "用户已确认（2026-11-24 12:00）",
+        "执行会话": "新会话",
+        "判据构成": "M1 2 / M2 1 / M3 1（未覆盖或仅部分验证 0 条）",
+        "用例冻结": "SHA256 0123456789abcdef / 冻结 2026-11-24 12:00",
+        "本轮问题": "P0 0 / P1 0 / P2 0 / P3 0",
+        "假设": "示例假设",
+    }
+    cases = [
+        {"#": "1", "验收点": "A1", "方法": "判定表", "输入": "示例", "期望": "通过", "期望来源": "用户口述", "实测": "通过", "证据": "命令输出", "判定": "通过 M1"},
+        {"#": "2", "验收点": "D1", "方法": "数据对账", "输入": "示例", "期望": "一致", "期望来源": "SQL 反算", "实测": "一致", "证据": "SQL", "判定": "通过 M2"},
+    ]
+    sections = {"九、未覆盖": "无", "十三、自我反证": "| 1 | 示例 | 假设 | 手段 | 否定 | 证据 |"}
+    html = mod.render_html(header, cases, sections, [])
+    assert "测试通过" in html
+    assert "module-test" in html or "自测报告" in html
+    assert "http://" not in html and "https://" not in html
+
+
+def test_bug_report_help():
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    result = subprocess.run(
+        [sys.executable, "-X", "utf8", str(SKILL_DIR / "scripts" / "bug_report.py"), "--help"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "bugs.json" in result.stdout or "缺陷" in result.stdout
+
+
+if __name__ == "__main__":
+    failures = []
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            try:
+                fn()
+                print("PASS", name)
+            except Exception as exc:
+                failures.append((name, exc))
+                print("FAIL", name, repr(exc))
+    sys.exit(1 if failures else 0)

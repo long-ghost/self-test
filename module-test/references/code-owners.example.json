@@ -1,0 +1,8 @@
+{
+  "owners": {},
+  "notes": "复制为 references/code-owners.json 后按模块/路径前缀填写；真实文件不提交。键可以是模块名、路径前缀或 glob，值可以是姓名或团队。",
+  "example": {
+    "<module>": ["<owner>"],
+    "<path-prefix>/": ["<owner>"]
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "round": "<YYYYMMDD>-<功能名>",
+  "env": "uat",
+  "tester": "AI",
+  "bugs": [
+    {
+      "title": "<模块>-<现象>",
+      "severity": "P2",
+      "type": "功能",
+      "module": "<所属业务模块>",
+      "product": "<禅道产品名或ID>",
+      "zentao_module": "",
+      "description": "<一句话说明问题>",
+      "preconditions": "<前置条件>",
+      "steps": [
+        "步骤 1",
+        "步骤 2",
+        "步骤 3"
+      ],
+      "expected": "<期望结果>",
+      "actual": "<实际结果>",
+      "api_url": "",
+      "api_method": "",
+      "api_request": "",
+      "api_response": "",
+      "screenshot": "shots/<截图文件名>.png",
+      "files": [
+        "<后端或前端文件路径>"
+      ],
+      "file_lines": {},
+      "owner": "",
+      "test_case_id": "",
+      "discovered_at": "<YYYY-MM-DD HH:mm:ss>",
+      "notes": ""
+    }
+  ]
+}
