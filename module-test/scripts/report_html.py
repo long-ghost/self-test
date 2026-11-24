@@ -10,7 +10,11 @@ import re
 import sys
 from pathlib import Path
 
-GREEN = "#0E7C7B"
+CHECK = "#0E7C7B"
+VERIFY = "#2F6FEB"
+MANUAL = "#8B5CF6"
+GAP = "#C6423F"
+GREEN = CHECK
 GREY = "#9BAEB8"
 AMBER = "#B8751B"
 INK = "#16242E"
@@ -19,8 +23,9 @@ LINE = "#D8DEE4"
 PAPER = "#F7F9F9"
 
 CSS = """
-:root { --green:#0E7C7B; --grey:#9BAEB8; --amber:#B8751B;
-  --ink:#16242E; --muted:#5B6B75; --line:#D8DEE4; --paper:#F7F9F9; }
+:root { --green:#0E7C7B; --verify:#2F6FEB; --manual:#8B5CF6; --gap:#C6423F;
+  --grey:#9BAEB8; --amber:#B8751B; --ink:#16242E; --muted:#5B6B75;
+  --line:#D8DEE4; --paper:#F7F9F9; }
 * { box-sizing:border-box; }
 body { margin:0; background:#EEF2F3; color:var(--ink);
   font-family:'Segoe UI','Microsoft YaHei',sans-serif; -webkit-font-smoothing:antialiased; }
@@ -48,6 +53,7 @@ body { margin:0; background:#EEF2F3; color:var(--ink);
 .metric.defect { background:#FFF7EA; border-color:var(--amber); color:#8A5A12;
   font-weight:700; text-decoration:none; }
 .metric.defect:hover { background:#F9E9CC; }
+.metric.risk { background:#F4F7FA; border-color:#AFC1CC; color:#4A6472; }
 .original { font-size:10px; color:#8A99A2; border-top:1px dashed var(--line);
   margin-top:14px; padding-top:8px; line-height:1.6; }
 .bar-label { font-size:11px; color:var(--muted); }
@@ -57,6 +63,8 @@ body { margin:0; background:#EEF2F3; color:var(--ink);
 .legend { display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
   margin-top:9px; font-size:11px; line-height:1.5; }
 .legend > div { text-align:center; white-space:nowrap; }
+.legend .dot { display:inline-block; width:7px; height:7px; margin-right:5px;
+  vertical-align:1px; }
 .legend b { font-family:Bahnschrift,Consolas,monospace; font-size:15px; margin-right:4px; }
 .hint { font-size:10px; color:#8A99A2; margin-top:10px;
   border-top:1px dashed var(--line); padding-top:7px; }
@@ -69,8 +77,13 @@ body { margin:0; background:#EEF2F3; color:var(--ink);
 .defects { margin-top:30px; border-top:1px solid var(--line); padding-top:18px; }
 .defects h2 { font-size:16px; margin:0; }
 .defect-hint { font-size:10px; color:var(--muted); margin-top:4px; }
-.defect-item { background:#fff; border:1px solid var(--line); margin-top:12px; padding:12px 14px; }
-.defect-head { font-family:Bahnschrift,Consolas,monospace; font-size:13px; color:var(--amber); }
+details.defect-item { background:#fff; border:1px solid var(--line); margin-top:12px; padding:10px 14px; }
+details.defect-item summary { cursor:pointer; font-family:Bahnschrift,Consolas,monospace;
+  font-size:12px; color:var(--ink); }
+details.defect-item summary::marker { color:var(--gap); }
+.defect-sev { color:var(--gap); font-weight:700; margin:0 6px; }
+.defect-module { color:var(--muted); font-size:10px; margin-left:8px; }
+.defect-body { margin-top:8px; border-top:1px solid #E6EBEE; padding-top:6px; }
 .defect-field { display:grid; grid-template-columns:72px 1fr; gap:8px;
   font-size:11px; line-height:1.6; margin-top:5px; }
 .defect-field .k { color:var(--muted); }
@@ -83,8 +96,9 @@ a { color:var(--green); }
 .filters { display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 12px; align-items:center; }
 .chip { border:1px solid var(--line); background:transparent; color:var(--muted);
   font-size:11px; padding:4px 9px; cursor:pointer; }
-.chip[aria-pressed="true"] { border-bottom:2px solid var(--green); color:var(--green); font-weight:700; }
-.chip.warn[aria-pressed="true"] { border-color:var(--amber); color:var(--amber); }
+.chip[aria-pressed="true"] { border-bottom:2px solid var(--chip,var(--green));
+  color:var(--chip,var(--green)); font-weight:700; }
+.chip.warn[aria-pressed="true"] { border-color:var(--chip,var(--amber)); color:var(--chip,var(--amber)); }
 .search { margin-left:auto; border:1px solid var(--line); font-size:11px; padding:4px 8px; width:160px; }
 .table { background:#fff; border:1px solid var(--line); max-height:520px; overflow:auto; }
 .thead, .case { display:flex; font-size:11px; align-items:center; }
@@ -365,6 +379,8 @@ def _test_result(cases: list[dict], header: dict, bugs: list[dict]) -> tuple[str
 
 def _safe_url(url: str) -> str:
     value = html.unescape(url.strip()).replace('"', "").replace("'", "")
+    if value.startswith("//") or value.startswith("\\"):
+        return "#"
     if re.match(r"^(?:https?://|/|\./|\.\./|#|mailto:)", value, re.I):
         return html.escape(value, quote=True)
     if ":" not in value and not value.startswith(("\\", "//")):
@@ -421,10 +437,19 @@ def _defect_section(bugs: list[dict]) -> str:
         ("说明", "notes"),
     ]
     for index, bug in enumerate(bugs, 1):
-        out.append("<article class='defect-item'>")
-        out.append("<div class='defect-head'>#" + str(index) + "</div>")
+        severity = _defect_value(bug.get("severity", ""))
+        title = _defect_value(bug.get("title", ""))
+        module = _defect_value(bug.get("module", ""))
+        out.append("<details class='defect-item'>")
+        out.append(
+            "<summary class='defect-head'>#" + str(index)
+            + "<span class='defect-sev'>" + severity + "</span>"
+            + title
+            + "<span class='defect-module'>" + module + "</span></summary>"
+        )
+        out.append("<div class='defect-body'>")
         for label, key in fields:
-            if key in bug:
+            if key in bug and key not in ("severity", "title", "module"):
                 value = _defect_value(bug.get(key))
                 out.append(
                     "<div class='defect-field'><span class='k'>" + _esc(label)
@@ -437,7 +462,7 @@ def _defect_section(bugs: list[dict]) -> str:
             screenshots = [str(screenshot)] if screenshot else []
         for shot in screenshots:
             out.append('<img src="' + _safe_url(shot) + '" alt="缺陷证据截图">')
-        out.append("</article>")
+        out.append("</div></details>")
     out.append("</section>")
     return "\n".join(out)
 
@@ -613,10 +638,10 @@ def render_html(
     assumptions = _assumptions(header)
     total = max(sum(counts.values()), 1)
     segments = [
-        (RE_MAP["M1"], with_source(RE_MAP["M1"]), counts[RE_MAP["M1"]], GREEN),
-        (RE_MAP["M2"], with_source(RE_MAP["M2"]), counts[RE_MAP["M2"]], MUTED),
-        (RE_MAP["M3"], with_source(RE_MAP["M3"]), counts[RE_MAP["M3"]], GREY),
-        ("gap", with_source("没测到"), counts["gap"], AMBER),
+        (RE_MAP["M1"], with_source(RE_MAP["M1"]), counts[RE_MAP["M1"]], CHECK),
+        (RE_MAP["M2"], with_source(RE_MAP["M2"]), counts[RE_MAP["M2"]], VERIFY),
+        (RE_MAP["M3"], with_source(RE_MAP["M3"]), counts[RE_MAP["M3"]], MANUAL),
+        ("gap", with_source("没测到"), counts["gap"], GAP),
     ]
 
     out: list[str] = [
@@ -661,7 +686,10 @@ def render_html(
         )
     out.extend(["</div><div class='legend'>"])
     for cat, display, count, color in segments:
-        out.append(f"<div><b>{count}</b>{_esc(display)}</div>")
+        out.append(
+            f"<div><span class='dot' style='background:{color}'></span>"
+            f"<b>{count}</b>{_esc(display)}</div>"
+        )
     out.extend([
         "</div><div class='hint'>点色块看这一类具体是哪几条 · 证据条按报告头判据构成，明细按用例实际判定</div>",
         "</section>",
@@ -671,11 +699,16 @@ def render_html(
         "<div class='filters'>",
         "<button class='chip' data-cat='all' aria-pressed='true'>全部 " + str(len(cases)) + "</button>",
     ])
+    chip_colors = {item[0]: item[3] for item in segments}
     for label in list(RE_MAP.values()) + ["gap"]:
         cat = "gap" if label == "gap" else label
         text = with_source("没测到") if label == "gap" else with_source(label)
         cls = "chip warn" if label == "gap" else "chip"
-        out.append(f"<button class='{cls}' data-cat='{_esc(cat)}' aria-pressed='false'>{_esc(text)}</button>")
+        color = chip_colors.get(cat, GREEN)
+        out.append(
+            f"<button class='{cls}' data-cat='{_esc(cat)}' aria-pressed='false' "
+            f"style='--chip:{color}'>{_esc(text)}</button>"
+        )
     out.extend([
         "<input class='search' placeholder='搜测试内容…' aria-label='搜索测试内容'>",
         "</div><div class='table'>",
