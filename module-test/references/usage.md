@@ -43,6 +43,8 @@ powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/update.
 
 开测前先确认档位：L1 静态 / L2 接口 / L3 端到端。L2/L3 需要用户授权编译、起服务、开浏览器。
 
+报告首部必须写 `**测试耗时**：<开始> → <结束>（共 N 分钟）`，口径是从确认档位与范围到报告定稿；HTML 顶栏会显示总耗时。
+
 ## 3. 七步流程
 
 1. 定档 + 定范围 + 判模块类型。

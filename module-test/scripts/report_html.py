@@ -27,8 +27,9 @@ body { margin:0; background:#EEF2F3; color:var(--ink);
 .sheet { max-width:1040px; margin:0 auto; padding:32px 36px 56px; }
 .topline { display:flex; justify-content:space-between; align-items:baseline;
   border-bottom:1px solid var(--line); padding-bottom:9px; }
-.topline .name { font-size:11px; letter-spacing:2px; color:var(--muted); }
-.topline .hash { font-family:Bahnschrift,Consolas,monospace; font-size:11px; color:#8A99A2; }
+.topline .name { font-size:11px; letter-spacing:2px; color:var(--muted); flex:1; }
+.topline .duration { font-size:11px; color:var(--muted); margin:0 18px; white-space:nowrap; }
+.topline .hash { font-family:Bahnschrift,Consolas,monospace; font-size:11px; color:#8A99A2; white-space:nowrap; }
 .hero { display:grid; grid-template-columns:52% 48%; gap:28px; margin-top:24px; }
 .verdict-panel { border-left:3px solid var(--green); padding-left:14px; }
 .risk-panel { border-left:1px solid var(--line); padding-left:16px; }
@@ -41,16 +42,22 @@ body { margin:0; background:#EEF2F3; color:var(--ink);
   border-left:3px solid var(--amber); padding-left:9px; }
 .verdict { font-family:Bahnschrift,'Segoe UI','Microsoft YaHei',sans-serif;
   font-size:40px; font-weight:600; line-height:1.1; margin-top:10px; color:var(--ink); }
-.verdict-sub { font-size:12px; color:var(--muted); margin-top:6px; line-height:1.7; }
+.verdict-sub { display:flex; flex-wrap:wrap; gap:7px; margin-top:9px; line-height:1.4; }
+.metric { display:inline-block; border:1px solid var(--line); background:#fff;
+  padding:4px 8px; font-size:11px; color:#2A3A44; }
+.metric.defect { background:#FFF7EA; border-color:var(--amber); color:#8A5A12;
+  font-weight:700; text-decoration:none; }
+.metric.defect:hover { background:#F9E9CC; }
 .original { font-size:10px; color:#8A99A2; border-top:1px dashed var(--line);
   margin-top:14px; padding-top:8px; line-height:1.6; }
 .bar-label { font-size:11px; color:var(--muted); }
 .bar { display:flex; height:8px; margin-top:11px; background:#E6EBEE; cursor:pointer; }
 .bar > div { height:100%; }
 .bar:hover { filter:brightness(.94); }
-.legend { display:flex; margin-top:9px; font-size:11px; line-height:1.5; }
-.legend > div { text-align:center; }
-.legend b { font-family:Bahnschrift,Consolas,monospace; font-size:15px; }
+.legend { display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+  margin-top:9px; font-size:11px; line-height:1.5; }
+.legend > div { text-align:center; white-space:nowrap; }
+.legend b { font-family:Bahnschrift,Consolas,monospace; font-size:15px; margin-right:4px; }
 .hint { font-size:10px; color:#8A99A2; margin-top:10px;
   border-top:1px dashed var(--line); padding-top:7px; }
 .risk-panel .row { border-bottom:1px solid #E6EBEE; padding:6px 0;
@@ -59,6 +66,15 @@ body { margin:0; background:#EEF2F3; color:var(--ink);
 .note { background:#EDF4F3; border-left:3px solid var(--green);
   padding:9px 12px; font-size:11px; color:#2A3A44; margin-top:20px; }
 .note span { color:#8A99A2; }
+.defects { margin-top:30px; border-top:1px solid var(--line); padding-top:18px; }
+.defects h2 { font-size:16px; margin:0; }
+.defect-hint { font-size:10px; color:var(--muted); margin-top:4px; }
+.defect-item { background:#fff; border:1px solid var(--line); margin-top:12px; padding:12px 14px; }
+.defect-head { font-family:Bahnschrift,Consolas,monospace; font-size:13px; color:var(--amber); }
+.defect-field { display:grid; grid-template-columns:72px 1fr; gap:8px;
+  font-size:11px; line-height:1.6; margin-top:5px; }
+.defect-field .k { color:var(--muted); }
+.defect-item img { display:block; max-width:100%; margin-top:8px; border:1px solid var(--line); }
 button { font:inherit; }
 a { color:var(--green); }
 .cases { margin-top:34px; }
@@ -164,6 +180,22 @@ def parse_header(text: str) -> dict[str, str]:
         if match:
             result[match.group(1).strip()] = match.group(2).strip()
     return result
+
+
+def _duration_parts(header: dict) -> tuple[str, str]:
+    raw = str(header.get("测试耗时", "")).strip()
+    match = re.search(r"(\d+)\s*分钟", raw)
+    if not match:
+        return "耗时未记录", "报告首部未记录测试耗时"
+    return f"耗时 {match.group(1)} 分钟", raw
+
+
+def _duration_text(header: dict) -> str:
+    return _duration_parts(header)[0]
+
+
+def _duration_title(header: dict) -> str:
+    return _duration_parts(header)[1]
 
 
 def _split_row(line: str) -> list[str]:
@@ -338,6 +370,76 @@ def _safe_url(url: str) -> str:
     if ":" not in value and not value.startswith(("\\", "//")):
         return html.escape(value, quote=True)
     return "#"
+
+
+def _detail_html(detail: str, bug_count: int) -> str:
+    parts: list[str] = []
+    for part in detail.split(" · "):
+        defect_match = re.fullmatch(r"缺陷\s*(\d+)\s*条", part.strip())
+        if defect_match and bug_count > 0:
+            parts.append(
+                "<a class='metric defect' href='#defects' title='查看缺陷明细'>"
+                + _esc(part.strip()) + "</a>"
+            )
+        else:
+            cls = "metric risk" if "风险" in part else "metric"
+            parts.append(f"<span class='{cls}'>" + _esc(part.strip()) + "</span>")
+    return "".join(parts)
+
+
+def _defect_value(value: object) -> str:
+    if value is None or value == "" or value == [] or value == {}:
+        return "—"
+    if isinstance(value, list):
+        return "；".join(_defect_value(item) for item in value)
+    if isinstance(value, dict):
+        return "；".join(f"{_esc(k)}：{_defect_value(v)}" for k, v in value.items())
+    return _esc(value)
+
+
+def _defect_section(bugs: list[dict]) -> str:
+    if not bugs:
+        return ""
+    out = [
+        "<section id='defects' class='defects'>",
+        "<h2>缺陷明细 · " + str(len(bugs)) + " 条</h2>",
+        "<div class='defect-hint'>与上方测试结论中的缺陷数对应；截图按相对路径加载。</div>",
+    ]
+    fields = [
+        ("等级", "severity"),
+        ("模块", "module"),
+        ("标题", "title"),
+        ("描述", "description"),
+        ("前置条件", "preconditions"),
+        ("步骤", "steps"),
+        ("期望", "expected"),
+        ("实际", "actual"),
+        ("接口", "api_url"),
+        ("接口方法", "api_method"),
+        ("接口请求", "api_request"),
+        ("接口响应", "api_response"),
+        ("说明", "notes"),
+    ]
+    for index, bug in enumerate(bugs, 1):
+        out.append("<article class='defect-item'>")
+        out.append("<div class='defect-head'>#" + str(index) + "</div>")
+        for label, key in fields:
+            if key in bug:
+                value = _defect_value(bug.get(key))
+                out.append(
+                    "<div class='defect-field'><span class='k'>" + _esc(label)
+                    + "</span><span>" + value + "</span></div>"
+                )
+        screenshot = bug.get("screenshot") or ""
+        if isinstance(screenshot, list):
+            screenshots = [str(item) for item in screenshot if item]
+        else:
+            screenshots = [str(screenshot)] if screenshot else []
+        for shot in screenshots:
+            out.append('<img src="' + _safe_url(shot) + '" alt="缺陷证据截图">')
+        out.append("</article>")
+    out.append("</section>")
+    return "\n".join(out)
 
 
 def _inline_md(text: str) -> str:
@@ -524,11 +626,12 @@ def render_html(
         "<title>自测报告 · " + _esc(verdict) + "</title>",
         "<style>" + CSS + "</style></head><body><main class='sheet'>",
         "<div class='topline'><span class='name'>自测报告 · " + _esc(header.get("范围", "本次改动")[:42]) + "</span>",
+        "<span class='duration' title='" + _esc(_duration_title(header)) + "'>" + _esc(_duration_text(header)) + "</span>",
         "<span class='hash'>清单 " + _esc(_hash16(header)) + "</span></div>",
         "<section class='hero'><div class='verdict-panel'>",
         "<div class='eyebrow'>测试结论</div>",
         "<div class='verdict'>" + _esc(test_verdict) + "</div>",
-        "<div class='verdict-sub'>" + _esc(test_detail) + "</div>",
+        "<div class='verdict-sub'>" + _detail_html(test_detail, len(bugs)) + "</div>",
         "</div><div class='risk-panel'>",
         "<h3>风险 · 单独列示</h3>",
         "<div class='risk-summary'>影响大 " + str(high_risks)
@@ -558,8 +661,7 @@ def render_html(
         )
     out.extend(["</div><div class='legend'>"])
     for cat, display, count, color in segments:
-        width = 100.0 * count / total
-        out.append(f"<div style='width:{width:.2f}%'><b>{count}</b><br>{_esc(display)}</div>")
+        out.append(f"<div><b>{count}</b>{_esc(display)}</div>")
     out.extend([
         "</div><div class='hint'>点色块看这一类具体是哪几条 · 证据条按报告头判据构成，明细按用例实际判定</div>",
         "</section>",
@@ -603,6 +705,8 @@ def render_html(
     if not cases:
         out.append("<div class='empty'>报告第二节没有可展示的用例表。</div>")
     out.append("</div></section>")
+
+    out.append(_defect_section(bugs))
 
     out.append("<section class='chapters'><h2>完整报告章节</h2>")
     for title, content in sections.items():

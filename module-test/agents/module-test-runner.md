@@ -97,7 +97,9 @@ tools: read_file, write_to_file, execute_command, search_file, search_content, w
 
 产物落在 `.codebuddy/selftest/<YYYYMMDD>-<功能名>/`，用 `assets/report-template.md` 与 `assets/cases-template.md`，收尾跑 `scripts/check-report.ps1` 到 PASS。
 
-回给主会话的摘要只写这六项，**不要贴报告全文**：
+报告首部必须写 `**测试耗时**：<开始> → <结束>（共 N 分钟）`。开始=本轮确认档位与范围的时间；结束=报告定稿时间；N 按真实分钟差四舍五入。禁止估算或按文件时间倒推。
+
+回给主会话的摘要只写这七项，**不要贴报告全文**：
 
 ```
 结论：通过 / 有条件通过 / 不通过
@@ -106,6 +108,7 @@ tools: read_file, write_to_file, execute_command, search_file, search_content, w
 未覆盖：<项 + 四要素摘要>
 能力内未测数：0（非 0 则本轮未完成）
 反证：x 条，其中转缺陷 y 条
+耗时：<开始> → <结束>（共 N 分钟）
 ```
 
 主会话不再复判你的结论——**你的判定就是最终判定**。所以宁可记一条存疑的缺陷，也不要放过一个说不清的行为。

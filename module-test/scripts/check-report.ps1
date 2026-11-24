@@ -63,6 +63,45 @@ if (Test-Path -LiteralPath (Join-Path $reportDir 'cases.md')) {
     }
 }
 
+# ---------- 1d. 整轮测试耗时 ----------
+$durationLine = $lines | Where-Object { $_ -match '^\*\*测试耗时\*\*[：:]' } | Select-Object -First 1
+if (-not $durationLine) {
+    $fail += '首部缺『测试耗时』：需写起止时间与总分钟'
+}
+else {
+    $durationMatch = [regex]::Match(
+        $durationLine,
+        '^\*\*测试耗时\*\*[：:]\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})\s*→\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})（共\s*(\d+)\s*分钟）'
+    )
+    if (-not $durationMatch.Success) {
+        $fail += '『测试耗时』格式错误：应为 YYYY-MM-DD HH:mm → YYYY-MM-DD HH:mm（共 N 分钟）'
+    }
+    else {
+        $format = 'yyyy-MM-dd HH:mm'
+        $culture = [System.Globalization.CultureInfo]::InvariantCulture
+        $styles = [System.Globalization.DateTimeStyles]::None
+        $startTime = [datetime]::MinValue
+        $endTime = [datetime]::MinValue
+        $validDates = [datetime]::TryParseExact($durationMatch.Groups[1].Value, $format, $culture, $styles, [ref]$startTime) -and
+            [datetime]::TryParseExact($durationMatch.Groups[2].Value, $format, $culture, $styles, [ref]$endTime)
+        if (-not $validDates) {
+            $fail += '『测试耗时』起止时间不是有效日期时间'
+        }
+        else {
+            $declaredMinutes = [int]$durationMatch.Groups[3].Value
+            if ($endTime -lt $startTime) {
+                $fail += '『测试耗时』结束时间早于开始时间'
+            }
+            else {
+                $actualMinutes = [math]::Round(($endTime - $startTime).TotalMinutes, [MidpointRounding]::AwayFromZero)
+                if ([math]::Abs($actualMinutes - $declaredMinutes) -gt 1) {
+                    $fail += "『测试耗时』分钟数不符：声明 $declaredMinutes，实际约 $actualMinutes"
+                }
+            }
+        }
+    }
+}
+
 # ---------- 2. 规则命中清单 ----------
 foreach ($id in $ruleIds) {
     $line = $lines | Where-Object { $_ -match "^\|\s*$id\s*\|" } | Select-Object -First 1
