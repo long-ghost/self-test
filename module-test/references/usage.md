@@ -2,8 +2,16 @@
 
 ## 1. 安装
 
-1. 解压 `module-test.zip`，把 `module-test/` 放到 `~/.codebuddy/skills/module-test/`。
-2. 把 `agents/module-test-runner.md` 复制到 `~/.codebuddy/agents/`（可选，但推荐）。
+Git 方式安装（支持自动更新检查）：
+
+```powershell
+# 在仓库克隆目录内执行；默认装到 ~/.codebuddy/skills/module-test/
+powershell -NoProfile -File "<仓库>/module-test/scripts/install.ps1"
+```
+
+安装脚本会把仓库缓存到 `~/.codebuddy/skill-cache/module-test`，同步 `module-test/` 到技能目录，安装记录写入 `.install.json`。zip 解压安装的目录可用同一脚本接管。
+
+2. 首次把 `agents/module-test-runner.md` 复制到 `~/.codebuddy/agents/`（`install.ps1` 默认会做，`-SkipAgent` 可跳过），并按本机环境配置模型与 MCP server。
 3. 在目标项目根目录运行初始化（`-Root` 指向待测项目）：
 
 ```powershell
@@ -14,6 +22,15 @@ powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/init-wo
    - `references/project-profile.md`：端口、启动命令、数据库、鉴权、浏览器、项目规则。
    - `references/test-accounts.csv`：真实测试账号；只保存在本机。
    - 按需配置 `agents/module-test-runner.md` 的模型与 MCP server。
+
+5. 需要时手动检查与安装更新（AI 不会主动查）：
+
+```powershell
+# 0 已最新 / 2 有更新 / 1 出错，不改任何文件
+powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/check-update.ps1"
+# 用户确认后升级；保留 4 个本地配置
+powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/update.ps1"
+```
 
 ## 2. 触发
 

@@ -5,7 +5,9 @@
 ## 快速开始
 
 ```powershell
-# 1. 把本目录放到 ~/.codebuddy/skills/module-test/
+# 1. 安装（Git 方式，支持后续更新；zip 解压的也用 install.ps1 接管一次）
+powershell -NoProfile -File "<仓库>/module-test/scripts/install.ps1"
+
 # 2. 在目标项目根目录初始化本地配置
 powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/init-workspace.ps1" -Root "<project-root>"
 
@@ -13,7 +15,10 @@ powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/init-wo
 #    references/project-profile.md
 #    references/test-accounts.csv
 
-# 4. 对 AI 说：测试一下 <模块名>
+# 4. 用户要求时手动检查更新（0 最新 / 2 有更新 / 1 出错），确认后跑 update.ps1
+powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/check-update.ps1"
+
+# 5. 对 AI 说：测试一下 <模块名>
 ```
 
 完整说明见 `references/usage.md`；账号填写见 `references/accounts-setup.md`。生成缺陷 Excel 前安装依赖：`python -m pip install -r requirements.txt`。

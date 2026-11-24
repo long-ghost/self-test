@@ -1,7 +1,7 @@
 ---
 name: module-test
 description: 功能完成后的模块级自测（功能 + 接口）。用户说「开始自测」「自测一下」「跑一轮自测」「帮我验一下这个功能」「测试一个模块」时使用。定档定范围 → 拆五层验收点 → 按方法设计用例（期望值执行前落盘并冻结）→ 执行并出带证据的报告 → 发现缺陷自动生成可导入禅道的 bugs.xlsx 与 API/MCP payload；含同模型自测的偏差对冲（换上下文 / 换判据 / 反证 pass / 豁免配额）；测试期间仓库只读，写库必复原，判定以需求为据不以源码为据。
-version: "1.0.0"
+version: "1.1.0"
 license: MIT
 ---
 
@@ -32,6 +32,27 @@ license: MIT
 - 生成 `references/setup-status.md`，列出已探测项、待填项、缺失后影响的档位。
 
 **首次运行门禁**：`references/project-profile.md` 或 `references/test-accounts.csv` 不存在时，L2 / L3 直接停下并打印缺失清单；L1 可继续，但必须声明未配置项目适配层。未安装 `agents/module-test-runner.md` 时提醒安装；不安装则按 R-19 降级并声明结论上限。
+
+## 安装与更新
+
+技能自身通过 Git 安装（缓存 clone + 同步到技能目录），安装记录在 `<技能目录>/.install.json`。脚本在本目录 `scripts/`，装好后可直接跑：
+
+| 场景 | 命令 | 退出码 |
+|---|---|---|
+| 首次安装 / zip 安装接管 | `install.ps1` | 0 成功 / 1 失败 |
+| 检查更新（只读，不改文件） | `check-update.ps1` | 0 已最新 / 2 有更新 / 1 出错 |
+| 执行更新 | `update.ps1` | 0 成功 / 1 失败 |
+
+```powershell
+powershell -NoProfile -File "<技能目录>\scripts\check-update.ps1"
+powershell -NoProfile -File "<技能目录>\scripts\update.ps1"
+```
+
+- **不主动检查**：只有用户明确说「检查更新」「看看有没有新版本」时才运行 `check-update.ps1`。开测前、复盘中、定时任务里都不要自动检查。
+- 有更新**先告知用户**，由用户决定是否升级；升级只在两轮之间做，**自测中途不升级**（与「禁止自测中途改技能」同一条约束）。
+- 更新会保留 4 个本地配置（`project-profile.md` / `test-accounts.csv` / `code-owners.json` / `setup-status.md`），其余文件以仓库为准，本地多出的文件会被删除。
+- 已改过的独立 agent 不会被覆盖，新版本写入 `module-test-runner.md.new`，由用户决定是否替换。
+- `check-update.ps1` 需要网络访问 Git 远程；离线环境跳过并在报告里注明「未检查更新」。
 
 ## 先承认它会漏（同模型自测的结构性问题）
 
@@ -385,6 +406,9 @@ python <技能目录>\scripts\bug_report.py `
 | `references/usage.md` | 首次使用、完整流程与命令示例 |
 | `references/accounts-setup.md` | 首次配置账号 CSV 时 |
 | `scripts/init-workspace.ps1` | 首次安装或缺少本地配置时 |
+| `scripts/check-update.ps1` | 用户要求检查版本更新时 |
+| `scripts/update.ps1` | 用户确认升级后执行更新 |
+| `scripts/install.ps1` | 新环境安装，或把 zip 解压安装接管为 Git 安装 |
 | `references/methods.md` | 第二步设计用例时 |
 | `references/pipeline.md` | 第五步三验时 |
 | `references/crud.md` | 判定模块类型、跑增删改查时 |

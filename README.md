@@ -14,24 +14,44 @@
 
 `module-test/` 是指南、脚本、模板与通用示例；真实项目配置、账号和责任人映射由使用者本地生成，不进入 Git。
 
-## 安装
+## 安装（把仓库地址交给 AI 即可）
 
-1. 下载 `dist/module-test.zip`，解压得到 `module-test/`。
-2. 放到 `~/.codebuddy/skills/module-test/`。
-3. 可选：把 `module-test/agents/module-test-runner.md` 复制到 `~/.codebuddy/agents/`，并按本机环境配置模型/数据库 MCP。
-4. 在目标项目根目录运行（`-Root` 指向待测项目）：
+本机需要 Git 与 PowerShell（Windows PowerShell 5.1 或 PowerShell 7）。让 AI 执行：
+
+```powershell
+$tmp = Join-Path $env:TEMP ('module-test-install-' + [guid]::NewGuid())
+git clone --depth 1 https://github.com/long-ghost/self-test.git $tmp
+powershell -NoProfile -File "$tmp/module-test/scripts/install.ps1"
+Remove-Item -Recurse -Force $tmp
+```
+
+安装脚本会：把仓库 clone/更新到缓存目录 `~/.codebuddy/skill-cache/module-test` → 同步 `module-test/` 到 `~/.codebuddy/skills/module-test/` → 首次安装时复制独立 agent 到 `~/.codebuddy/agents/` → 写安装记录 `.install.json`。
+
+可选参数：`-RepoUrl`、`-Ref`、`-CacheDir`、`-SkillDir`、`-AgentDir`、`-SkipAgent`、`-Force`（重装）。
+
+> 离线包方式：`dist/module-test.zip` 解压后把 `module-test/` 放到 `~/.codebuddy/skills/module-test/`；之后想启用自动更新，用上面的 `install.ps1` 接管一次（补齐安装记录）。
+
+安装后在目标项目根目录初始化本地配置：
 
 ```powershell
 powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/init-workspace.ps1" -Root "<project-root>"
 ```
 
-5. 按 `references/setup-status.md` 补齐：
-   - `references/project-profile.md`
-   - `references/test-accounts.csv`
-   - 按需填写 `references/code-owners.json`
-6. 对 AI 说「测试一下 <模块名>」。
+按 `references/setup-status.md` 补齐 `project-profile.md`、`test-accounts.csv`，按需填 `code-owners.json`，然后对 AI 说「测试一下 <模块名>」。
 
-> 生成缺陷 Excel 需要 `openpyxl`：`python -m pip install -r module-test/requirements.txt`。
+> 生成缺陷 Excel 需要 `openpyxl`：`python -m pip install -r "$HOME/.codebuddy/skills/module-test/requirements.txt"`。
+
+## 更新
+
+```powershell
+# 只看有没有更新：0 已最新 / 2 有更新 / 1 出错，不改任何文件
+powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/check-update.ps1"
+
+# 升级：保留 4 个本地配置，其余以仓库为准
+powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/update.ps1"
+```
+
+检查更新是手动动作：想升级时先跑 `check-update.ps1` 看新旧版本、提交区间和 CHANGELOG 对应段落，确认后再跑 `update.ps1`。AI 侧约定写在 `SKILL.md`「安装与更新」：只有用户明确要求才检查，升级只在两轮自测之间做。
 
 ## 首次初始化会做什么
 
@@ -52,6 +72,8 @@ module-test/references/setup-status.md
 ```
 
 账号 CSV 含明文密码，不进报告、截图、日志、缺陷 Excel；转发前运行 `module-test/scripts/export-sanitized.ps1`，对外分享用 `-OmitAccounts`。
+
+技能目录由安装/更新脚本托管：同步时以上 4 个文件原样保留，其他本地新增文件会被删除。安装记录在 `.install.json`（版本、提交、远程地址），删掉它等于放弃自动更新。
 
 ## 开发与发布
 
