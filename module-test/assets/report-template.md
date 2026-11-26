@@ -132,7 +132,7 @@
 
 | 用例编号 | 业务断言 | 判据 | 交叉核验 | 实测 | 证据 | 判定 |
 |---|---|---|---|---|---|---|
-| L4-DEMO-001 | 示例断言 | M3 | M2：SQL 反算 | 通过 | l4/midscene/report.html | 通过 M3 |
+| L4-DEMO-001 | 示例断言 | M3 | M2：SQL 反算 | 通过 | l4/midscene/Midscene报告.html | 通过 M3 |
 
 **失败步骤**：无（失败时写 用例编号 / 步骤 / 报错 / 截图）
-**套件沉淀**：`e2e/midscene/suite.json`（SHA256 —）；本轮新增/更新 — 条
+**套件沉淀**：`E2E_ROOT/e2e/midscene/suite.json`（SHA256 —）；本轮新增/更新 — 条

@@ -31,7 +31,7 @@ license: MIT
 - 从 `code-owners.example.json` 生成 `references/code-owners.json` 草稿；有 `CODEOWNERS` 或 git 历史时可生成建议值。
 - 生成 `references/setup-status.md`，列出已探测项、待填项、缺失后影响的档位。
 
-**首次运行门禁**：`references/project-profile.md` 或 `references/test-accounts.csv` 不存在时，L2 / L3 直接停下并打印缺失清单；L4 另需 Node / pnpm / 全局 runner / 模型 Key / `e2e/midscene/suite.json`，缺一即停；L1 可继续，但必须声明未配置项目适配层。未安装 `agents/module-test-runner.md` 时提醒安装；不安装则按 R-19 降级并声明结论上限。
+**首次运行门禁**：`references/project-profile.md` 或 `references/test-accounts.csv` 不存在时，L2 / L3 直接停下并打印缺失清单；L4 另需 Node / pnpm / 全局 runner / 模型 Key / `E2E_ROOT/e2e/midscene/suite.json`（默认 `<项目根>/E2E测试/`），缺一即停；L1 可继续，但必须声明未配置项目适配层。未安装 `agents/module-test-runner.md` 时提醒安装；不安装则按 R-19 降级并声明结论上限。
 
 ## 安装与更新
 
@@ -158,7 +158,7 @@ python <技能目录>\scripts\report_html.py --report "<产物目录>\report.md"
 | R-25 | 禅道写入安全 | Excel/payload 不含密码、token、cookie；`--zentao` 只从环境变量取凭证；无禅道环境时 Excel 为唯一交付，不许假装已写入 |
 | R-26 | 能测必测 | 账号可用、控件可达、入口可导航、数据可通过换参数或合法造数复原触发的项，必须亲自执行；禁止「相邻分支已验证」「接口层验过等于页面验过」「按钮存在等于弹窗验过」 |
 | R-27 | 未覆盖举证 | 每条未覆盖必须写 `[尝试] [证据] [原因] [补测]` 四要素，缺任一视为未完成；能力内未测不得写「通过」 |
-| R-28 | 需求冲突用户裁决 | 用户口述与项目文档冲突、文档缺失或用户新增时，必须返回用户裁决；未确认不得冻结用例或开测 |
+| R-28 | 需求手写优先 | 必须先请用户用自己的话手写业务逻辑（不要求写全、不许 AI 代写或文档勾选代替）；与文档冲突时以用户手写为准，用户未写处才看文档并标「文档补充」，二者都没有才返回用户裁决；未确认不得冻结用例或开测 |
 
 **不适用的规则必须写依据**（例：R-08 不适用——模块只读，Controller 仅 GET）。留空等于没做。
 
@@ -203,14 +203,17 @@ python <技能目录>\scripts\report_html.py --report "<产物目录>\report.md"
 
 ### 1.5 需求确认（冻结前硬门槛）
 
-1. 读需求原文 / plan / 页面 README / 规范，只读「做什么」段落，不读实现。
-2. 请用户用自己的话描述本轮要测的业务需求，**不提供选项**：测什么、谁用、期望行为、明确不测什么。
-3. 生成需求确认表：条目 / 文档依据 / 用户口述 / 状态（一致、冲突、文档缺失、用户新增）/ 用户裁决 / 本轮生效版本。
-4. 冲突、文档缺失、用户新增三类必须返回用户裁决，由用户选择「以文档为准 / 以口述为准 / 合并 / 删除 / 暂不测」。**Agent 不许自行裁决**。
-5. 全部确认后，把「本轮生效需求」写进 `cases.md` 头部，并在报告首部写 `**需求确认**：用户已确认（YYYY-MM-DD HH:mm）`。
-6. 任一冲突未裁决：停下，返回冲突清单；不生成 `cases.md`、不冻结、不开页面、不打接口。
+1. 读需求原文 / plan / 页面 README / 规范，只读「做什么」段落，不读实现；**文档只作为对齐参考，不代替用户口述**。
+2. **必须请用户用自己的话手写本轮业务逻辑**（不提供选项、不许 AI 代写、不许拿文档条目让用户勾选）：测什么业务、谁用、期望行为、明确不测什么。不要求写全——用户写了多少算多少。
+3. **优先级规则（用户裁决，2026-11-26）**：
+   - 用户手写逻辑与需求文档冲突时，**一律以用户手写逻辑为准**，不需要再让用户二选一裁决；
+   - 用户手写逻辑没写到的部分，才看项目原本的需求文档，按文档补齐并标注「文档补充」；
+   - 文档缺失、且用户也没写的部分，才返回用户裁决。
+4. 生成需求确认表：条目 / 文档依据 / 用户手写原话 / 状态（一致 / 冲突-以用户为准 / 文档补充 / 文档缺失待裁决）/ 本轮生效版本 / 来源标注（用户手写 / 文档补充 / 用户裁决）。
+5. 全部确认后，把「本轮生效需求」写进 `cases.md` 头部，并在报告首部写 `**需求确认**：用户已确认（YYYY-MM-DD HH:mm）`、`**口述来源**：用户手写 N 条 / 文档补充 M 条 / 裁决 K 条`。
+6. 文档缺失且用户未写、需要拍板才继续时：停下，返回缺口清单（附带「按现有文档推断」的建议），不生成 `cases.md`、不冻结、不开页面、不打接口。
 
-用户口述只是本轮生效需求的来源之一，不自动覆盖文档；只有用户明确裁决后的版本才算最终需求（R-28）。
+**主会话派活时不得把自己的需求理解、文档摘要塞给 agent 当「用户口述」**；agent 拿到的是「用户手写原文 + 文档参考」两栏，冲突处按第 3 条自动以用户手写为准（R-28）。检查脚本会拦截「用户口述」列全是文档勾选、没有用户手写原话的报告。
 
 ### 2 拆验收点
 
@@ -288,11 +291,11 @@ python <技能目录>\scripts\report_html.py --report "<产物目录>\report.md"
 
 **仓库只读**：源码、配置、文档、共享层全部只读；唯一可写是 `.codebuddy/selftest/<本轮>/`。发现问题只报告，连一行 typo 也不顺手改。
 
-**L4 例外**：仅在用户当轮授权后，允许写 `e2e/midscene/{cases,fixtures}/**`、`e2e/midscene/suite.json`、`e2e/midscene/README.md`，且只用于沉淀用例；业务源码与配置仍一律不动。`l4-run.ps1` 收尾用 `git status --porcelain` 校验，越界即退出 4、本轮作废。详见 `references/l4-midscene.md`。
+**L4 例外**：仅在用户当轮授权后，允许写产物根 `E2E_ROOT/e2e/midscene/{cases,fixtures}/**`、`suite.json`、`README.md`，且只用于沉淀用例；业务源码与配置仍一律不动。`l4-run.ps1` 收尾用 `git status --porcelain` 校验，越界即退出 4、本轮作废。详见 `references/l4-midscene.md`。
 
 **写库**：可用 Python + pymysql 自助造数，无需逐次确认。七条硬约束（确认测试环境而非生产、不碰 DDL 与系统表、`SELFTEST_` 前缀、改行先快照、DELETE/UPDATE 必带主键、`try/finally` 清理、结束验证复原）见 `project-profile.md`。
 
-**产物**：`.codebuddy/selftest/<YYYYMMDD>-<功能名>/` 下只留 `cases.md`（冻结件）、`report.md`、`shots/`；`report.html` 是第 6 步由 `scripts/report_html.py` 生成的附加阅读物；有缺陷时加 `bugs.json`、`bugs.xlsx`、`zentao_bugs.json`。`report.md` 保持为 `check-report.ps1` 的机器校验底稿，不因 HTML 生成而删改。收尾六问：脚本 PASS、`git status` 干净、目录只剩允许的产物、服务与端口已释放、复盘已写、缺陷单已生成并核对字段。
+**产物**：全部结果文件集中在 `E2E_ROOT/<YYYYMMDD-HHmmss>-<功能名>/` 一个目录（`E2E_ROOT` 默认 `<项目根>/E2E测试/`，可用环境变量或 `references/project-profile.md` 的 `E2E_ROOT=` 覆盖，允许仓库外绝对路径）。目录内：`cases.md`（冻结件）、`report.md`、`report.html`、`shots/`、`l4/`（含 `Midscene报告.html`）、`e2e/midscene/` 套件快照、有缺陷时加 `bugs.json` / `bugs.xlsx` / `zentao_bugs.json`。L4 套件源已整合进产物根 `E2E_ROOT/e2e/midscene/`（含 `suite.json` + `cases/**`），与测试结果同在大目录；本轮目录内是其快照副本。一次测试一个目录，便于横向对比。`report.md` 仍是 `check-report.ps1` 的机器校验底稿。收尾六问：脚本 PASS、`git status` 干净、目录只剩允许的产物、服务与端口已释放、复盘已写、缺陷单已生成并核对字段。
 
 **敏感文件**：`references/test-accounts.csv` 含明文密码，属本机文件；不进报告、不进产物目录，转发技能前用 `scripts/export-sanitized.ps1` 导出脱敏副本。
 
@@ -376,7 +379,7 @@ python <技能目录>\scripts\bug_report.py `
 用 `assets/report-template.md`，**十四节固定**。头部第一屏必须有：
 
 ```
-**结论** / **本轮问题**：P0 x / P1 x / P2 x / P3 x（明细见七、八节）/ **范围** / **需求来源** / **需求确认**：用户已确认（YYYY-MM-DD HH:mm）/ **测试耗时**：<YYYY-MM-DD HH:mm> → <YYYY-MM-DD HH:mm>（共 N 分钟）/ **执行会话**：新会话 | 同会话（同会话 ⇒ 结论上限「有条件通过」）/ **判据构成**：M1 x / M2 x / M3 x（M3 占比 y%）/ **用例冻结**：cases.md SHA256 <16 位> / **缺陷记录**：bugs.xlsx x 条（责任人待确认 y 条）/ **假设**
+**结论** / **本轮问题**：P0 x / P1 x / P2 x / P3 x（明细见七、八节）/ **范围** / **需求来源** / **需求确认**：用户已确认（YYYY-MM-DD HH:mm）/ **口述来源**：用户手写 N 条 / 文档补充 M 条 / 裁决 K 条 / **测试耗时**：<YYYY-MM-DD HH:mm> → <YYYY-MM-DD HH:mm>（共 N 分钟）/ **执行会话**：新会话 | 同会话（同会话 ⇒ 结论上限「有条件通过」）/ **判据构成**：M1 x / M2 x / M3 x（M3 占比 y%）/ **用例冻结**：cases.md SHA256 <16 位> / **缺陷记录**：bugs.xlsx x 条（责任人待确认 y 条）/ **假设**
 ```
 
 `测试耗时` 必须写真实起止时间：开始=确认档位与范围，结束=报告定稿；禁止估算或按文件时间倒推。
@@ -403,7 +406,7 @@ python <技能目录>\scripts\bug_report.py `
 - 责任人只许按映射表 / git blame / 待确认三级来，不许猜姓名（R-24）
 - 禅道凭证、密码、token、cookie 不许进 Excel、payload、报告、日志（R-25）
 - 能力内可执行却写进未覆盖 = 本轮未完成，结论不得高于「有条件通过」；补齐后才允许写「通过」（R-26/R-27）
-- 需求冲突、文档缺失、用户新增未经用户裁决 = 本轮未完成，不得冻结用例或开测（R-28）
+- 用户未手写业务逻辑、拿文档勾选或 AI 代写当口述 = 本轮未完成（R-28）；手写与文档冲突未以手写为准、或用户未写处未标「文档补充」同理
 - 不碰共享文件、不自建工具链
 - 不 cd 进 `dist/` / `target/`；不并发编译
 - 产物只留报告、截图与缺陷记录（`bugs.json` / `bugs.xlsx` / `zentao_bugs.json`），日志、profile、临时脚本一律删
@@ -441,6 +444,7 @@ python <技能目录>\scripts\bug_report.py `
 | `references/code-owners.json` | 模块/路径 → 责任人映射（用户后续维护） |
 | `scripts/bug_report.py` | 生成 `bugs.xlsx` 与 `zentao_bugs.json` |
 | `scripts/report_html.py` | 生成 HTML 报告时 |
+| `scripts/e2e-root.ps1` | 产物根 E2E_ROOT 统一解析（l4-run / check-report 共用） |
 | `scripts/check-report.ps1` | 收尾自检 |
 | `scripts/export-sanitized.ps1` | 转发 / 打包技能前导出脱敏副本 |
 | `references/independence.md` | 开测前读一次（偏差机制 / 判据分级 / 反证操作 / 做不到的事） |

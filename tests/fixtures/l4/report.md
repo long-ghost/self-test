@@ -5,6 +5,7 @@
 **范围**：示例模块 L4 端到端
 **需求来源**：用户口述
 **需求确认**：用户已确认（2026-11-24 12:00）；冲突 / 文档缺失 / 用户新增均已裁决
+**口述来源**：用户手写 1 条 / 文档补充 0 条 / 裁决 0 条
 **测试耗时**：__START__ → __END__（共 __DURATION__ 分钟）
 **用例冻结**：cases.md / SHA256 __CASES_SHA__ / 冻结 __START__（收尾复核一致）
 **L4 套件冻结**：suite.json / SHA256 __SUITE_SHA__ / 冻结 __START__
@@ -114,7 +115,7 @@
 
 | 用例编号 | 业务断言 | 判据 | 交叉核验 | 实测 | 证据 | 判定 |
 |---|---|---|---|---|---|---|
-| L4-DEMO-001 | 页面显示金额 100 元 | M3 | M2：SQL 反算 | 通过 | l4/midscene/report.html shots/demo.png | 通过 M3 |
+| L4-DEMO-001 | 页面显示金额 100 元 | M3 | M2：SQL 反算 | 通过 | l4/midscene/Midscene报告.html shots/demo.png | 通过 M3 |
 
 **失败步骤**：无
-**套件沉淀**：`e2e/midscene/suite.json`（SHA256 __SUITE_SHA__）；本轮新增 1 条
+**套件沉淀**：`E2E_ROOT/e2e/midscene/suite.json`（SHA256 __SUITE_SHA__）；本轮新增 1 条

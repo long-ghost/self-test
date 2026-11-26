@@ -71,6 +71,18 @@ body { margin:0; background:#EEF2F3; color:var(--ink);
 .risk-panel .row { border-bottom:1px solid #E6EBEE; padding:6px 0;
   font-size:11px; line-height:1.6; color:#2A3A44; }
 .risk-panel .row:last-child { border-bottom:0; }
+.risks { margin-top:26px; border-top:1px solid var(--line); padding-top:16px; }
+.risks h2 { font-size:16px; margin:0 0 4px; }
+.risk-intro { font-size:10px; color:var(--muted); margin-bottom:12px; }
+.risk-item { background:#fff; border:1px solid var(--line); border-left:3px solid var(--amber);
+  padding:11px 14px; margin-top:10px; }
+.risk-head { display:flex; align-items:baseline; gap:9px; line-height:1.6; }
+.risk-no { font-family:Bahnschrift,Consolas,monospace; font-size:13px; color:#8A99A2; min-width:18px; }
+.risk-title { flex:1; font-size:12px; font-weight:700; color:#2A3A44; }
+.risk-field { display:grid; grid-template-columns:40px 1fr; gap:8px; font-size:11px;
+  line-height:1.65; margin-top:6px; color:#2A3A44; }
+.risk-field .k { color:var(--muted); }
+.risk-field .v { white-space:pre-wrap; word-break:break-word; }
 .note { background:#EDF4F3; border-left:3px solid var(--green);
   padding:9px 12px; font-size:11px; color:#2A3A44; margin-top:20px; }
 .note span { color:#8A99A2; }
@@ -197,7 +209,7 @@ JS = """
 RE_MAP = {
     "M1": "命令核对",
     "M2": "二次检验",
-    "M3": "人工查看",
+    "M3": "AI断言",
 }
 
 
@@ -320,6 +332,23 @@ def _bullets(text: str, limit: int) -> list[str]:
         if match:
             items.append(match.group(1).strip())
     return items[:limit]
+
+
+def _parse_gap_item(text: str) -> dict[str, str]:
+    """把一条未覆盖拆成 {标题, 尝试, 证据, 原因, 补测}；四要素是报告第九节约定标记。"""
+    marks = ("[尝试]", "[证据]", "[原因]", "[补测]")
+    result = {"标题": text.strip(), "尝试": "", "证据": "", "原因": "", "补测": ""}
+    positions = [(text.find(m), m) for m in marks if text.find(m) >= 0]
+    if not positions:
+        return result
+    positions.sort()
+    head = positions[0][0]
+    result["标题"] = text[:head].strip(" ；;。-")
+    for index, (pos, mark) in enumerate(positions):
+        end = positions[index + 1][0] if index + 1 < len(positions) else len(text)
+        value = text[pos + len(mark):end].strip(" ；;。")
+        result[mark.strip("[]")] = value
+    return result
 
 
 def _gap_count(header: dict[str, str], cases: list[dict[str, str]]) -> int:
@@ -607,6 +636,38 @@ def _hash16(header: dict) -> str:
     return header.get("_hash16") or "—"
 
 
+def _risk_section(gap_lines: list[str]) -> str:
+    """独立风险区域：一条一块、带编号、四要素分行，影响度单独标注。"""
+    out = [
+        "<section class='risks' id='risks'>",
+        "<h2>未覆盖与风险 · " + str(len(gap_lines)) + " 项</h2>",
+        "<div class='risk-intro'>不参与主结论；下列为能力内未测或仅部分验证的项，点「补测」可看如何补。</div>",
+    ]
+    if not gap_lines:
+        out.append("<div class='empty'>本轮没有未覆盖项。</div>")
+    for index, line in enumerate(gap_lines, 1):
+        parsed = _parse_gap_item(line)
+        level = _impact(parsed["标题"])
+        cls = "big" if level == "大" else "small"
+        label = "影响大" if level == "大" else "可手动补测"
+        out.append("<article class='risk-item'>")
+        out.append(
+            "<div class='risk-head'><span class='risk-no'>" + str(index) + "</span>"
+            "<span class='risk-title'>" + _esc(parsed["标题"]) + "</span>"
+            "<span class='impact " + cls + "'>" + label + "</span></div>"
+        )
+        for key in ("尝试", "证据", "原因", "补测"):
+            value = parsed.get(key, "")
+            if value:
+                out.append(
+                    "<div class='risk-field'><span class='k'>" + key
+                    + "</span><span class='v'>" + _esc(value) + "</span></div>"
+                )
+        out.append("</article>")
+    out.append("</section>")
+    return "\n".join(out)
+
+
 def _counterevidence_count(sections: dict[str, str]) -> int | str:
     text = sections.get("十三、自我反证", "")
     match = re.search(r"(\d+)\s*条反证", text)
@@ -707,7 +768,7 @@ def _l4_section(l4: dict) -> str:
         out.append("</div>")
 
     out.append(
-        "<div class='l4-links'><a href='" + _safe_url("l4/midscene/report.html") + "'>Midscene 原始报告</a>"
+        "<div class='l4-links'><a href='" + _safe_url("l4/midscene/Midscene报告.html") + "'>Midscene 报告</a>"
         "<a href='" + _safe_url("l4/midscene/result.md") + "'>result.md</a>"
         "<a href='" + _safe_url("l4/l4-summary.json") + "'>l4-summary.json</a></div>"
     )
@@ -757,23 +818,16 @@ def render_html(
         "<div class='verdict'>" + _esc(test_verdict) + "</div>",
         "<div class='verdict-sub'>" + _detail_html(test_detail, len(bugs)) + "</div>",
         "</div><div class='risk-panel'>",
-        "<h3>风险 · 单独列示</h3>",
+        "<h3>未覆盖概览</h3>",
         "<div class='risk-summary'>影响大 " + str(high_risks)
         + " · 可手动补测 " + str(low_risks) + " · 不参与主结论</div>",
+        "<div class='subhead'>这次默认的前提 · " + str(len(assumptions)) + " 条</div>",
     ])
-    for item in gaps:
-        level = _impact(item)
-        cls = "big" if level == "大" else "small"
-        label = "影响大" if level == "大" else "可手动补测"
-        out.append(
-            "<div class='row'>· " + _esc(item)
-            + "<span class='impact " + cls + "'>" + label + "</span></div>"
-        )
-    out.append("<div class='subhead'>这次默认的前提 · " + str(len(assumptions)) + " 条</div>")
     for item in assumptions:
         out.append("<div class='row'>· " + _esc(item) + "</div>")
     out.extend([
         "</div></section>",
+        _risk_section(gaps),
         "<section class='evidence'>",
         "<div class='bar-label'>" + str(len(cases)) + " 项测试，证据有多硬（点色块筛选）</div>",
         "<div class='bar' data-cat='all'>",

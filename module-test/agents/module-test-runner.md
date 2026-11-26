@@ -22,7 +22,7 @@ tools: read_file, write_to_file, execute_command, search_file, search_content, w
 2. 检查 `references/project-profile.md` 与 `references/test-accounts.csv`：
    - 缺失时，L2/L3 直接停下，打印 `references/setup-status.md` 中的缺失项，让使用者运行 `scripts/init-workspace.ps1` 并填写。
    - L1 可继续，但必须在报告首部声明「项目适配层/账号未配置」。
-   - L4 另查 Node / pnpm / 全局 runner / 模型 Key / Cookie 引用（`cookiesEnv` 或 `storageStatePath`）/ `e2e/midscene/suite.json`；用 `l4-init.ps1 -CheckOnly` 看缺失，缺一即停，不许先跑再补。
+   - L4 另查 Node / pnpm / 全局 runner / 模型 Key / Cookie 引用（`cookiesEnv` 或 `storageStatePath`）/ `E2E_ROOT/e2e/midscene/suite.json`；用 `l4-init.ps1 -CheckOnly` 看缺失，缺一即停，不许先跑再补。
 3. 未安装独立 agent 时，按 R-19 降级并声明结论上限。
 
 ## 第一步：认领任务，确认档位

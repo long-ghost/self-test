@@ -66,7 +66,7 @@ def test_html_report_renders_l4():
     html = mod.render_html(header, cases, sections, [], l4)
     assert "L4 端到端（Midscene）" in html
     assert "L4-DEMO-001" in html
-    assert "l4/midscene/report.html" in html
+    assert "l4/midscene/Midscene报告.html" in html
     assert "shots/demo.png" in html
     assert "http://" not in html and "https://" not in html
 

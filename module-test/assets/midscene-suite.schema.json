@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/long-ghost/self-test/module-test/assets/midscene-suite.schema.json",
   "title": "module-test L4 Midscene 套件清单",
-  "description": "业务仓库 e2e/midscene/suite.json 的唯一套件清单；一个 YAML 文件只放一条用例。",
+  "description": "产物根 E2E_ROOT/e2e/midscene/suite.json 的唯一套件清单（默认 <repo>/E2E测试/）；一个 YAML 文件只放一条用例。",
   "type": "object",
   "required": ["schemaVersion", "project", "module", "cases"],
   "properties": {

@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$Round,
     [string]$RepoRoot = (Get-Location).Path,
-    [string]$Suite = 'e2e/midscene/suite.json',
+    [string]$Suite = '',
     [string]$Case = '',
     [string]$Tag = '',
     [string[]]$Secrets = @(),
@@ -14,6 +14,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $skillRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'e2e-root.ps1')
 $runnerDir = $env:L4_RUNNER_DIR
 if ([string]::IsNullOrWhiteSpace($runnerDir)) {
     $runnerDir = Join-Path $env:USERPROFILE '.codebuddy\skill-data\module-test\l4-runner'
@@ -67,15 +68,20 @@ if (-not [System.IO.Path]::IsPathRooted($roundPath)) {
     $roundPath = Join-Path $repo $roundPath
 }
 $roundFull = [System.IO.Path]::GetFullPath($roundPath).TrimEnd('\', '/')
-$selftestRoot = [System.IO.Path]::GetFullPath((Join-Path $repo '.codebuddy\selftest')).TrimEnd('\', '/')
-if (-not $roundFull.StartsWith($selftestRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
-    Write-Output "FAIL -Round 必须位于 .codebuddy/selftest/ 下：$roundFull"
+$e2eRoot = Get-E2ERoot -RepoRoot $repo -SkillRoot $skillRoot
+if (-not (Test-PathUnderRoot -Path $roundFull -Root $e2eRoot)) {
+    Write-Output "FAIL -Round 必须位于产物根 E2E_ROOT 下（$e2eRoot）：$roundFull"
     exit 2
 }
 
-$suitePath = $Suite
-if (-not [System.IO.Path]::IsPathRooted($suitePath)) {
-    $suitePath = Join-Path $repo $suitePath
+$suiteRoot = Join-Path $e2eRoot 'e2e\midscene'
+if ([string]::IsNullOrWhiteSpace($Suite)) {
+    $suitePath = Join-Path $suiteRoot 'suite.json'
+} else {
+    $suitePath = $Suite
+    if (-not [System.IO.Path]::IsPathRooted($suitePath)) {
+        $suitePath = Join-Path $repo $suitePath
+    }
 }
 if (-not (Test-Path -LiteralPath $suitePath)) {
     Write-Output "FAIL 套件不存在：$suitePath"
@@ -124,7 +130,6 @@ if ($selected.Count -eq 0) {
     exit 4
 }
 
-$e2eRoot = Join-Path $repo 'e2e\midscene'
 $staged = @()
 $manifestFiles = @()
 foreach ($item in $selected) {
@@ -134,7 +139,7 @@ foreach ($item in $selected) {
         exit 4
     }
     $rel = ([string]$item.file) -replace '\\', '/'
-    $source = Join-Path $e2eRoot ($rel -replace '/', '\')
+    $source = Join-Path $suiteRoot ($rel -replace '/', '\')
     if (-not (Test-Path -LiteralPath $source)) {
         Write-Output "FAIL 用例文件不存在：$rel"
         exit 4
@@ -160,7 +165,7 @@ foreach ($item in $selected) {
     }
 }
 
-$fixturesRoot = Join-Path $e2eRoot 'fixtures'
+$fixturesRoot = Join-Path $suiteRoot 'fixtures'
 $fixtureFiles = @()
 if (Test-Path -LiteralPath $fixturesRoot) {
     $fixtureFiles = @(Get-ChildItem -LiteralPath $fixturesRoot -Recurse -File)
@@ -208,7 +213,7 @@ if ($DryRun) {
 }
 
 if (-not $Authorize) {
-    Write-Output 'FAIL 未授权：需要 -Authorize 才会暂存用例、调用模型并写 e2e/midscene'
+    Write-Output 'FAIL 未授权：需要 -Authorize 才会暂存用例、调用模型并写产物目录'
     exit 3
 }
 
@@ -354,9 +359,28 @@ $summaryJson = Get-ChildItem -LiteralPath $resultsRoot -Recurse -File -Filter 's
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($resultMd) { Copy-Item -LiteralPath $resultMd.FullName -Destination (Join-Path $roundMidscene 'result.md') -Force }
 if ($summaryJson) { Copy-Item -LiteralPath $summaryJson.FullName -Destination (Join-Path $roundMidscene 'summary.json') -Force }
+
+# 套件快照：用例 YAML 副本 + suite.json 一并进本轮目录，让每次测试自包含（套件源 E2E_ROOT/e2e/midscene 保留不变）
+$roundCases = Join-Path $roundFull (Join-Path 'e2e\midscene' 'cases')
+New-Item -ItemType Directory -Path $roundCases -Force | Out-Null
+Copy-Item -LiteralPath $suitePath -Destination (Join-Path $roundFull (Join-Path 'e2e\midscene' 'suite.json')) -Force
+foreach ($entry in $staged) {
+    $destCase = Join-Path $roundCases ($entry.Rel -replace '/', '\')
+    $destCaseDir = Split-Path -Parent $destCase
+    if (-not (Test-Path -LiteralPath $destCaseDir)) { New-Item -ItemType Directory -Path $destCaseDir -Force | Out-Null }
+    Copy-Item -LiteralPath $entry.Source -Destination $destCase -Force
+}
+
+# Midscene 官方报告：文件名中文化 + 替换硬编码 <title>
 $reportHtml = Get-ChildItem -LiteralPath (Join-Path $runDir 'artifacts') -Recurse -File -Filter '*.html' -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if ($reportHtml) { Copy-Item -LiteralPath $reportHtml.FullName -Destination (Join-Path $roundMidscene 'report.html') -Force }
+$midsceneReportPath = Join-Path $roundMidscene 'Midscene报告.html'
+if ($reportHtml) {
+    $htmlText = [System.IO.File]::ReadAllText($reportHtml.FullName)
+    $htmlTitle = 'Midscene 端到端测试报告 · ' + [string]$suiteData.module
+    $htmlText = [regex]::Replace($htmlText, '(?is)<title>.*?</title>', '<title>' + $htmlTitle + '</title>', 1)
+    Write-Utf8 $midsceneReportPath $htmlText
+}
 
 # ---------- 6. 截图归档 ----------
 $shotDir = Join-Path (Join-Path $roundFull 'shots') 'l4'
@@ -438,8 +462,13 @@ if ($UpdateSuite) {
 }
 
 # ---------- 9. 越界检查 ----------
-$roundRel = $roundFull.Substring($repo.Length).TrimStart('\', '/') -replace '\\', '/'
-$allowed = @('e2e/midscene/', $roundRel + '/')
+# 套件源与产物都在 E2E_ROOT 下：产物根在仓库内时，其相对路径即白名单（覆盖套件源与本轮）；
+# 在仓库外时 git status 本就看不到，无需加入。
+$allowed = @()
+if (Test-PathUnderRoot -Path $e2eRoot -Root $repo) {
+    $e2eRel = $e2eRoot.Substring($repo.Length).TrimStart('\', '/') -replace '\\', '/'
+    $allowed += $e2eRel + '/'
+}
 $gitStatus = Invoke-Native 'git' @('-C', $repo, 'status', '--porcelain', '-uall')
 $newChanges = @($gitStatus.Output | Where-Object { $_ -and ($gitBaseline -notcontains $_) })
 $violations = @()

@@ -57,7 +57,7 @@ steps:
 
 ## 4. 套件与沉淀流程
 
-唯一清单：`e2e/midscene/suite.json`（schema 见 `assets/midscene-suite.schema.json`）。
+唯一清单：`E2E_ROOT/e2e/midscene/suite.json`（默认 `<repo>/E2E测试/`，schema 见 `assets/midscene-suite.schema.json`）。
 
 ```powershell
 # 扫描 cases/ 生成或更新清单；无 -Authorize 只打印差异
@@ -67,7 +67,7 @@ python "$HOME/.codebuddy/skills/module-test/scripts/l4_suite.py" collect --repo-
 python "$HOME/.codebuddy/skills/module-test/scripts/l4_suite.py" collect --repo-root . --module <模块名> --authorize
 
 # 输出十五节可粘贴的 Markdown 表
-python "$HOME/.codebuddy/skills/module-test/scripts/l4_suite.py" export --suite e2e/midscene/suite.json
+python "$HOME/.codebuddy/skills/module-test/scripts/l4_suite.py" export --suite "E2E测试/e2e/midscene/suite.json"
 ```
 
 - `criterion` 默认 `M3`；数值 / 金额 / 条数 / 权限 / 占比类断言必须在 `crossVerifiedBy` 写明 M1/M2 来源（SQL、接口）。没有交叉核验 ⇒ 该条结论上限「有条件通过」。
@@ -77,7 +77,7 @@ python "$HOME/.codebuddy/skills/module-test/scripts/l4_suite.py" export --suite 
 
 ```powershell
 powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/l4-run.ps1" `
-  -Round ".codebuddy/selftest/<本轮>" -Authorize `
+  -Round "<E2E_ROOT>/<YYYYMMDD-HHmmss>-<功能名>" -Authorize `
   [-Case L4-ORD-001 | -Tag smoke] [-Secrets "MIDSCENE_MODEL_API_KEY=..."] [-DryRun] [-UpdateSuite]
 ```
 
@@ -85,14 +85,16 @@ powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/l4-run.
 - `-Case` / `-Tag` 二选一（都不传则跑 suite 全部）；`-Secrets` 可传 `KEY=VALUE`、`.env` 路径或 JSON 文件。
 - 运行前会校验模型 Key 是否存在，以及用例里的 `cookiesEnv` 变量和 `storageStatePath` 文件是否存在，缺失直接退出 2，不会跑到一半才报错。
 - 每轮在 `~/.codebuddy/skill-data/module-test/l4-runner/runs/<runId>/` 独立执行：暂存 `cases/` + `fixtures/`，生成配置与 `staged-manifest.json`，结果落 `results/`，HTML 报告落 `artifacts/`。
-- 本轮产物：
+- 本轮产物（一次测试全部集中在此，`<Round>` = `E2E_ROOT/<时间戳>-<功能名>`，产物根默认 `<项目根>/E2E测试/`、可在 `project-profile.md` 配 `E2E_ROOT=` 到仓库外）：
 
 ```text
 <Round>/
-├── l4/l4-summary.json              # 归一化结果（用例、状态、截图、脱敏）
+├── cases.md / report.md / report.html   # 冻结件 / 机器底稿 / 管理者视图
+├── l4/l4-summary.json                   # 归一化结果（用例、状态、截图、脱敏）
 ├── l4/midscene/result.md
 ├── l4/midscene/summary.json
-├── l4/midscene/report.html         # Midscene 单文件报告
+├── l4/midscene/Midscene报告.html        # Midscene 报告（文件名与 <title> 已中文化）
+├── e2e/midscene/suite.json + cases/**   # 本轮套件快照（自包含，便于仓库外归档与横向对比）
 └── shots/l4/<caseId>-stepN.png
 ```
 

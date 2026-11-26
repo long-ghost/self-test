@@ -118,7 +118,7 @@ $statusLines += @(
     '',
     '- L1：无需账号，可执行静态/契约核对。',
     '- L2/L3：缺 project-profile 或 test-accounts 时不得开测；先补齐。',
-    '- L4：另需 Node ≥20.19 + pnpm + 全局 runner + 模型 Key + e2e/midscene/suite.json；用 `l4-init.ps1 -CheckOnly` 查看缺失。',
+    '- L4：另需 Node ≥20.19 + pnpm + 全局 runner + 模型 Key + E2E_ROOT/e2e/midscene/suite.json（默认 <repo>/E2E测试/）；用 `l4-init.ps1 -CheckOnly` 查看缺失。',
     '- 未安装 `agents/module-test-runner.md`：仍可自测，但按 R-19 降级并声明结论上限。'
 )
 if ($created.Count -gt 0) {

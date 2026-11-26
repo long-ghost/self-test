@@ -1,6 +1,6 @@
 # Midscene Test 用例模板
 # 契约：一个 YAML 文件只放一条用例；file 与 suite.json 里的 caseId / name 一一对应。
-# 沉淀位置：业务仓库 e2e/midscene/cases/<模块>/<caseId>.yaml
+# 沉淀位置：产物根 E2E_ROOT/e2e/midscene/cases/<模块>/<caseId>.yaml（默认 <repo>/E2E测试/）
 # 安全：禁止写 password / token / cookie 明文；登录态用 setCookies 引用环境变量或 storageState。
 # 步骤之间没有隐式状态，每条自然语言指令都要写全目标，禁止「上一步」「刚才那个」。
 beforeEach:

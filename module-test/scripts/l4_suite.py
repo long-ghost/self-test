@@ -1,6 +1,6 @@
 """L4 Midscene 套件清单工具：collect / upsert / export。
 
-套件清单固定为业务仓库 e2e/midscene/suite.json，一个 YAML 文件只放一条用例。
+套件清单固定为产物根 E2E_ROOT/e2e/midscene/suite.json（默认 <repo>/E2E测试/），一个 YAML 文件只放一条用例。
 不依赖 PyYAML：只解析 cases 列表的 name / tags，其余字段以 suite 为准。
 """
 
@@ -12,10 +12,30 @@ import re
 import sys
 from datetime import date
 from pathlib import Path
+import os
 
 CASE_ID_RE = re.compile(r"^L4-[A-Z0-9]+-\d{3}$")
 STATUSES = ("passed", "failed", "skipped")
 STATUS_CN = {"passed": "通过", "failed": "失败", "skipped": "跳过"}
+
+
+def _e2e_root(repo: Path) -> Path:
+    """产物根：环境变量 E2E_ROOT > project-profile.md 的 E2E_ROOT= > <repo>/E2E测试。"""
+    import re as _re
+    raw = os.environ.get("E2E_ROOT", "").strip()
+    if not raw:
+        skill_root = Path(__file__).resolve().parent.parent
+        profile = skill_root / "references" / "project-profile.md"
+        if profile.is_file():
+            for line in profile.read_text(encoding="utf-8").splitlines():
+                match = _re.match(r"^\s*E2E_ROOT\s*[:=]\s*(.+?)\s*$", line)
+                if match:
+                    raw = _unquote(match.group(1))
+                    break
+    if not raw:
+        raw = "E2E测试"
+    path = Path(raw)
+    return path.resolve() if path.is_absolute() else (repo / path).resolve()
 
 
 def _unquote(value: str) -> str:
@@ -153,14 +173,14 @@ def _entry_defaults(case_id: str, rel: str, parsed: dict, today: str) -> dict:
 
 def cmd_collect(args: argparse.Namespace) -> int:
     repo = Path(args.repo_root).resolve()
-    root = repo / "e2e" / "midscene"
+    root = _e2e_root(repo) / "e2e" / "midscene"
     suite_path = Path(args.suite).resolve() if args.suite else root / "suite.json"
     suite = load_suite(suite_path)
 
     errors: list[str] = []
     parsed_entries: list[dict] = []
     if not root.is_dir():
-        errors.append(f"未找到 {root}（先创建 e2e/midscene/cases/）")
+        errors.append(f"未找到 {root}（先创建 E2E_ROOT/e2e/midscene/cases/）")
 
     today = args.date or date.today().isoformat()
     for path in _case_files(root):

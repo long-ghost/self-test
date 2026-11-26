@@ -5,6 +5,8 @@
 )
 
 $ErrorActionPreference = 'Stop'
+$skillRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'e2e-root.ps1')
 
 if (-not (Test-Path -LiteralPath $Report)) {
     Write-Output "FAIL: 报告不存在 - $Report"
@@ -57,10 +59,19 @@ if ($text -notmatch '需求确认') {
 elseif ($text -notmatch '用户已确认（\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}）') {
     $fail += "『需求确认』缺用户确认时间（R-28）"
 }
+if ($text -notmatch '口述来源') {
+    $fail += "首部缺『口述来源』（R-28）：须写用户手写 N 条 / 文档补充 M 条 / 裁决 K 条"
+}
+elseif ($text -match '口述来源[^\r\n]*?用户手写\s*0\s*条') {
+    $fail += "『口述来源』显示用户手写 0 条（R-28）：必须先请用户用自己的话手写业务逻辑，不许文档勾选或 AI 代写代替"
+}
 if (Test-Path -LiteralPath (Join-Path $reportDir 'cases.md')) {
     $casesConfirm = Get-Content -LiteralPath (Join-Path $reportDir 'cases.md') -Raw -Encoding UTF8
     if ($casesConfirm -notmatch '需求确认表' -or $casesConfirm -notmatch '用户已确认') {
         $fail += "cases.md 缺『需求确认表 / 用户已确认』（R-28）"
+    }
+    if ($casesConfirm -notmatch '用户手写原话') {
+        $fail += "cases.md 需求确认表缺『用户手写原话』列（R-28）：须留用户原话，不能用文档勾选代替"
     }
 }
 
@@ -241,7 +252,7 @@ $l4CaseCount = 0
 if ($isL4) {
     if ($text -notmatch '###\s*十五、') { $fail += '缺章节：### 十五、（L4）' }
 
-    foreach ($rel in @('l4\l4-summary.json', 'l4\midscene\result.md', 'l4\midscene\summary.json')) {
+    foreach ($rel in @('l4\l4-summary.json', 'l4\midscene\result.md', 'l4\midscene\summary.json', 'l4\midscene\Midscene报告.html')) {
         if (-not (Test-Path -LiteralPath (Join-Path $reportDir $rel))) {
             $fail += ('L4 缺产物：' + ($rel -replace '\\', '/'))
         }
@@ -254,21 +265,23 @@ if ($isL4) {
         catch { $fail += 'l4/l4-summary.json 无法解析' }
     }
 
-    $rootCandidate = $RepoRoot
-    if ([string]::IsNullOrWhiteSpace($rootCandidate)) { $rootCandidate = $reportDir }
-    $candidate = [System.IO.Path]::GetFullPath($rootCandidate).TrimEnd('\', '/')
+    # 优先用本轮目录内的 suite 快照（产物根可在仓库外），再回退到仓库源
     $suitePath = ''
-    while ($candidate) {
-        $probe = Join-Path $candidate 'e2e\midscene\suite.json'
-        if (Test-Path -LiteralPath $probe) { $suitePath = $probe; break }
-        $parent = Split-Path -Parent $candidate
-        if (-not $parent -or $parent -eq $candidate) { break }
-        $candidate = $parent
+    $roundSnapshot = Join-Path $reportDir (Join-Path 'e2e\midscene' 'suite.json')
+    if (Test-Path -LiteralPath $roundSnapshot) {
+        $suitePath = $roundSnapshot
+    } else {
+        # 套件源已整合进产物根 E2E_ROOT/e2e/midscene/suite.json
+        $repoCandidate = $RepoRoot
+        if ([string]::IsNullOrWhiteSpace($repoCandidate)) { $repoCandidate = $reportDir }
+        $rootForSuite = Get-E2ERoot -RepoRoot $repoCandidate -SkillRoot $skillRoot
+        $probe = Join-Path $rootForSuite (Join-Path 'e2e\midscene' 'suite.json')
+        if (Test-Path -LiteralPath $probe) { $suitePath = $probe }
     }
 
     $suiteIds = @()
     if (-not $suitePath) {
-        $fail += 'L4 找不到 e2e/midscene/suite.json（可用 -RepoRoot 指定仓库根）'
+        $fail += 'L4 找不到套件：本轮目录快照与 E2E_ROOT/e2e/midscene/suite.json 均无（可用 -RepoRoot 指定仓库根）'
     } else {
         try {
             $suiteData = Get-Content -LiteralPath $suitePath -Raw -Encoding UTF8 | ConvertFrom-Json

@@ -39,17 +39,20 @@ try {
     $repoRoot = Join-Path $work 'repo'
     $round = Join-Path $repoRoot '.codebuddy\selftest\20261124-l4'
     $suitePath = Join-Path $repoRoot 'e2e\midscene\suite.json'
+    $snapshotSuite = Join-Path $round 'e2e\midscene\suite.json'
     New-Item -ItemType Directory -Path $round -Force | Out-Null
     New-Item -ItemType Directory -Path (Split-Path -Parent $suitePath) -Force | Out-Null
+    New-Item -ItemType Directory -Path (Split-Path -Parent $snapshotSuite) -Force | Out-Null
 
     Copy-Item -LiteralPath (Join-Path $fixture 'suite.json') -Destination $suitePath -Force
+    Copy-Item -LiteralPath (Join-Path $fixture 'suite.json') -Destination $snapshotSuite -Force
     Copy-Item -LiteralPath (Join-Path $fixture 'cases.md') -Destination (Join-Path $round 'cases.md') -Force
     Copy-Item -LiteralPath (Join-Path $fixture 'report.md') -Destination (Join-Path $round 'report.md') -Force
     Copy-Item -LiteralPath (Join-Path $fixture 'l4') -Destination (Join-Path $round 'l4') -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $fixture 'l4-summary.json') -Destination (Join-Path $round 'l4\l4-summary.json') -Force
 
     $l4Dir = Join-Path $round 'l4\midscene'
-    Write-Utf8 (Join-Path $l4Dir 'report.html') '<!DOCTYPE html><html><body>fixture</body></html>'
+    Write-Utf8 (Join-Path $l4Dir 'Midscene报告.html') '<!DOCTYPE html><html><body>fixture</body></html>'
 
     $png = [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
     $shotDir = Join-Path $round 'shots'
@@ -57,7 +60,7 @@ try {
     [System.IO.File]::WriteAllBytes((Join-Path $shotDir 'demo.png'), $png)
 
     $casesHash = (Get-FileHash -LiteralPath (Join-Path $round 'cases.md') -Algorithm SHA256).Hash.Substring(0, 16).ToLower()
-    $suiteHash = (Get-FileHash -LiteralPath $suitePath -Algorithm SHA256).Hash.Substring(0, 16).ToLower()
+    $suiteHash = (Get-FileHash -LiteralPath $snapshotSuite -Algorithm SHA256).Hash.Substring(0, 16).ToLower()
 
     $template = Get-Content -LiteralPath (Join-Path $round 'report.md') -Raw -Encoding UTF8
     $l4Report = $template.Replace('__CASES_SHA__', $casesHash).Replace('__SUITE_SHA__', $suiteHash).Replace('__START__', '2026-11-24 12:00').Replace('__END__', '2026-11-24 12:07').Replace('__DURATION__', '7')
