@@ -59,6 +59,13 @@ const fileSetup = defineFileSetup<FileContext, ProjectContext>({
 const getAgent = ({ context }: NodeExecutionContext<unknown, FileContext>) => {
   context.agent ??= new PlaywrightAgent(context.page, {
     testRunner: { getEnv: () => process.env, getBaseUrl: () => process.env.L4_BASE_URL || 'http://localhost:3000' },
+    ...(process.env.L4_CACHE_ID ? {
+      cache: {
+        id: process.env.L4_CACHE_ID,
+        strategy: (process.env.L4_CACHE_STRATEGY as 'read-only'|'read-write'|'write-only') || 'read-only',
+        cacheDir: process.env.L4_CACHE_DIR,
+      },
+    } : {}),
   });
   return context.agent;
 };
