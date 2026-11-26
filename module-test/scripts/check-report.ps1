@@ -382,6 +382,35 @@ if ($isL4) {
     }
 }
 
+# ---------- 8b. L4 回归缓存统计：仅当 l4/cache-stats.json 存在时校验，普通 L4 不受影响 ----------
+$cacheStatsPath = Join-Path $reportDir (Join-Path 'l4' 'cache-stats.json')
+if (Test-Path -LiteralPath $cacheStatsPath) {
+    $cs = $null
+    try {
+        $cs = Get-Content -LiteralPath $cacheStatsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        $fail += 'l4/cache-stats.json 无法解析'
+    }
+    if ($null -ne $cs) {
+        foreach ($fld in @('cacheId', 'strategy', 'hit')) {
+            if ($null -eq $cs.PSObject.Properties[$fld]) {
+                $fail += "l4/cache-stats.json 缺字段：$fld"
+            }
+        }
+        if ($null -ne $cs.PSObject.Properties['strategy'] -and
+            [string]$cs.strategy -notin @('read-only', 'write-only')) {
+            $fail += "l4/cache-stats.json strategy 非法（只允许 read-only / write-only）：$($cs.strategy)"
+        }
+        if ($null -ne $cs.PSObject.Properties['hit']) {
+            $hitVal = $cs.hit
+            $hitOk = ([string]$hitVal -eq '未采集') -or ([string]$hitVal -match '^\d+$')
+            if (-not $hitOk) {
+                $fail += "l4/cache-stats.json hit 非法（只允许『未采集』或整数）：$hitVal"
+            }
+        }
+    }
+}
+
 # ---------- 输出 ----------
 if ($fail.Count -eq 0) {
     $extra = ''

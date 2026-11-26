@@ -161,3 +161,65 @@ powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/l4-run.
 
 - 不往业务仓库安装 `node_modules`，runner 由 `l4-init.ps1` 维护。
 - `runs/` 可整目录删除，不影响业务仓库；需要复盘时保留对应 runId。
+
+## 11. 回归与缓存（l4-regression.ps1）
+
+沉淀好的用例用 `l4-regression.ps1` 一键跑回归：选 stable + confirmed-bug 哨兵 → 注入缓存策略 → 调 `l4-run.ps1` → 清理临时文件。选集临时文件只写系统临时目录 `$env:TEMP`，`finally` 清理，不写业务仓库。
+
+```powershell
+# 日常回归：默认 read-only（只读缓存）；-Authorize 是真实执行必需，非 DryRun 不可省
+powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/l4-regression.ps1" `
+  -Round "<E2E_ROOT>/<YYYYMMDD-HHmmss>-<功能名>" -Authorize `
+  [-Kind stable|bug|all] [-Module <模块名>] [-Case L4-XXX-001 | -Tag smoke] [-Secrets "MIDSCENE_MODEL_API_KEY=..."]
+
+# 首跑建基线 / 用例改版后重建：write-only（只写不读）；重建后下一轮回 read-only
+powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/l4-regression.ps1" `
+  -Round "<E2E_ROOT>/<YYYYMMDD-HHmmss>-<功能名>" -RebuildCache -Authorize -UpdateSuite
+```
+
+- `-Kind all`（默认）= stable + confirmed-bug 哨兵；`-Kind stable` 只跑 stable；`-Kind bug` 只跑哨兵。回归集合为空（还没有 stable 用例）时报错退出 2，不静默跑空。
+- `-DryRun` 只打印选择与命令、不写文件不调模型；**真实执行必须 `-Authorize`**，否则 `l4-run.ps1` 以退出码 3 拒绝。
+- 不指定任何缓存策略时，`l4-run.ps1` 行为与原先完全一致，不产出 `l4/cache-stats.json`。
+
+### 准入规则（套件生命周期）
+
+| maturity | 含义 | 如何进入 / 退出 |
+|---|---|---|
+| `draft` | 新用例默认 | `collect` 后缺省状态 |
+| `candidate` | 候选 | 过渡态 |
+| `stable` | 回归成员 | **连续 3 次 pass** 自动晋升；中间任一次失败即清零 |
+| `confirmed-bug` | 哨兵（确认为真 bug 的用例） | 人工 `promote --case-id ... --bug-id ...`；**不会被连续 pass 自动转正**，须显式 `promote --status fixed` |
+| `retired` | 退役 | 人工标记 |
+
+- 回归集合 = `stable` + `confirmed-bug`（`regressionEligible` 为派生、不落盘）。哨兵保留在回归集用于确认修复，修复须人工转正，不靠自动连续 pass 洗白。
+- 回写只在 `-UpdateSuite` 时发生；默认只输出建议、不改 `suite.json`。`lastStatus` / `consecutivePasses` 由脚本维护，不手改。
+
+### 缓存 id 口径
+
+`l4-<moduleSlug>-<sha8(caseId+file+YAML sha256)>`：
+
+- 稳定内容 = 本轮每个用例的 `caseId + file + 该 YAML 文件内容 sha256`，按 `caseId` 排序后拼接，取 sha256 前 8 位。
+- **绝不用 `suite.json` 全文哈希**：`lastStatus` / `consecutivePasses` 每轮回写都会变，全文哈希会让 cache id 每轮漂移、缓存永不命中。
+- 只有用例 YAML 改动才换 id；执行状态回写不影响。`moduleSlug` = 模块名可读 slug（小写、非字母数字转 `-`）。
+- 缓存目录：`E2E_ROOT/e2e/midscene/cache/`，缓存文件 `<cacheDir>/<cacheId>.cache.yaml`。
+
+### read-only / write-only 语义
+
+| 策略 | 读缓存 | 写缓存 | 用途 |
+|---|---|---|---|
+| `read-only`（回归默认） | 命中复用 | 否 | 日常回归；命中即少调 AI、省时省 token |
+| `write-only`（`-RebuildCache`） | 否 | 是 | 首跑建基线、用例改版后重建；重建后下一轮回 read-only |
+
+- 通过 `L4_CACHE_ID` / `L4_CACHE_STRATEGY` / `L4_CACHE_DIR` 注入 runner，不为每个模块改配置模板。
+- **回归只读缓存**：read-only 下命中不改写缓存文件。
+
+### 失败复核（aiAct replan vs aiAssert cacheSuspect）
+
+| 现象 | 机制 | 判定与动作 |
+|---|---|---|
+| 命中的 **aiAct** 执行失败 | Midscene 内置 stale-replan：自动重新 AI 规划并重跑该 aiAct，read-only 下不写回缓存；console.log 出现 `will replan and disable the stale cache` | 该条按最终断言结果判定，报告提示复核；技能不重复执行整条用例（避免双重计数） |
+| **aiAssert** 断言失败（读模式命中缓存） | aiAssert 不触发 replan（仅 aiAct 路径） | 该条标 `cacheSuspect=true`，报告提示「用 `-RebuildCache` 复核后再定性」，**不自动记产品缺陷** |
+| `-RebuildCache` 复核后仍稳定失败、无缓存疑点 | — | 正常按 bug 流程记缺陷；不自动标 `confirmed-bug`（人工裁决） |
+
+- `l4/cache-stats.json` 字段：`cacheId` / `strategy` / `cacheFile` / `cacheReplanCases` / `hit` / `note`。`hit` 无结构化来源时写「未采集」，**不编造命中数字**；`cacheReplanCases` 是全局 replan 计数、无法精确归因单条，故各 case 的 `cacheReplan` 记 `false`（见 `note`）。
+- `l4-summary.json` 仅在指定策略时多出 `cacheStrategy` / `cacheReplanCount` 顶层字段与每条的 `cacheSuspect` / `cacheReplan`；普通 L4 结构零变化。

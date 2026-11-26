@@ -195,7 +195,7 @@ python <技能目录>\scripts\report_html.py --report "<产物目录>\report.md"
 | L1 | 不启服务：契约比对、字段链路、SQL 脚本、typecheck、构建、UI 规则代码级核对 | 2~5 min | 代码自洽；证不了交互 |
 | L2 | 启后端打接口：返回码、业务码、字段、空结果、越权 | 5~15 min | 后端行为；证不了页面 |
 | L3 | 前后端 + 无头浏览器 + 截图 | 15~40 min | 端到端 |
-| L4 | Midscene Test：真实浏览器 + YAML 用例 + AI 断言，可沉淀到 `e2e/midscene/` | 20~60 min | 可复用的端到端行为；AI 断言按 M3，数值 / 权限必须另有 M1/M2 |
+| L4 | Midscene Test：真实浏览器 + YAML 用例 + AI 断言，可沉淀到 `e2e/midscene/` | 20~60 min | 可复用的端到端行为；AI 断言按 M3，数值 / 权限必须另有 M1/M2；回归入口用 `l4-regression.ps1`（默认 read-only，重建 `-RebuildCache`） |
 
 范围默认 = 本次 `git diff` + 最近相关 plan；**工作区干净时必须问清测哪次改动**，不能默认「最近一次提交」。
 
@@ -386,6 +386,8 @@ python <技能目录>\scripts\bug_report.py `
 
 **L4 报告**：十四节结构不变，另在首部加 `**L4 套件冻结**` / `**L4 执行**` 两行，文末追加「十五、L4 端到端（Midscene）」（格式见 `assets/report-template.md`）。非 L4 报告删除这两行且不出现第十五节，`check-report.ps1` 据此区分。HTML 用 `report_html.py --l4` 生成附加视图。
 
+**L4 回归报告**（条件出现）：仅当本轮是 `l4-regression.ps1` 回归产物（存在 `l4/cache-stats.json`）时，首部在「L4 执行」之后再加一行 `**L4 回归**：套件 N 条 / 缓存命中 M / 重规划 K`，并在第十五节补缓存统计行（用例 N / 缓存命中 M / 重规划 K）。普通 L4 与 L1/L2/L3 报告**不出现**这两行。`check-report.ps1` 只在 `l4/cache-stats.json` 存在时校验缓存字段；命中若无结构化来源写「未采集」，**不许编造命中数字**。
+
 ## 红线
 
 - 不许跳过执行契约：七步产出缺一项即未完成；报告缺「规则命中清单」等同未执行
@@ -437,6 +439,7 @@ python <技能目录>\scripts\bug_report.py `
 | `references/l4-midscene.md` | L4 开测前必读：YAML 规则 / 套件沉淀 / 安全红线 / 降级条件 |
 | `scripts/l4-init.ps1` | L4 首次初始化与预检（`-CheckOnly` / `-Install` / `-ModelVerify`） |
 | `scripts/l4-run.ps1` | L4 执行、暂存、归档结果与越界校验 |
+| `scripts/l4-regression.ps1` | L4 回归入口：选 stable + 哨兵用例注入缓存策略后调 `l4-run.ps1`（日常 read-only，首跑/重建 `-RebuildCache`） |
 | `scripts/l4_suite.py` | L4 套件 `collect` / `upsert` / `export` |
 | `scripts/l4_summary.py` | L4 结果归一化与脱敏 |
 | `assets/bug-record-template.json` | 发现缺陷后复制成 `bugs.json` 填单 |
