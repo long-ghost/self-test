@@ -206,6 +206,8 @@ def build_summary(
     secrets: dict | None = None,
     exit_code: int = 0,
     shots_map: dict | None = None,
+    cache_strategy: str = "",
+    cache_replan_count: int = 0,
 ) -> dict:
     results = Path(results_dir)
     suite_data = _read_json(Path(suite_path)) or {}
@@ -332,6 +334,24 @@ def build_summary(
     if not normalized and result_md_text:
         counts = _counts_from_markdown(result_md_text)
 
+    # 缓存可观测字段：仅在调用方声明了策略时写入，普通 L4 结构零变化。
+    # cacheReplan 是全局计数，无法精确归因到单个 case，统一记 false（说明见 cache-stats.json 的 note）。
+    if cache_strategy:
+        for case in normalized:
+            failed_step = case.get("failedStep")
+            step_text = ""
+            if isinstance(failed_step, dict):
+                step_text = "{} {}".format(
+                    failed_step.get("node", ""), failed_step.get("error", "")
+                ).lower()
+            is_ai_assert = "aiassert" in step_text
+            case["cacheSuspect"] = bool(
+                cache_strategy == "read-only"
+                and case.get("status") == "failed"
+                and is_ai_assert
+            )
+            case["cacheReplan"] = False
+
     staged_files: list[dict] = []
     run_id = ""
     suite_sha = ""
@@ -363,6 +383,9 @@ def build_summary(
         "stagedFiles": staged_files,
         "redacted": sorted(str(key) for key in secret_payload.keys()) if isinstance(secret_payload, dict) else [],
     }
+    if cache_strategy:
+        summary["cacheStrategy"] = cache_strategy
+        summary["cacheReplanCount"] = int(cache_replan_count)
     if console_text and not normalized:
         summary["consoleTail"] = "\n".join(console_text.splitlines()[-40:])
     return _redact_value(summary, secret_values)
@@ -379,6 +402,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--secrets-env", default="", help="逗号分隔的环境变量名，只取值不落盘")
     parser.add_argument("--shots-map", default="")
     parser.add_argument("--exit-code", type=int, default=0)
+    parser.add_argument("--cache-strategy", default="", help="L4 缓存策略；非空时写入 cacheSuspect/cacheReplan")
+    parser.add_argument("--cache-replan-count", type=int, default=0, help="全局 replan 计数（无法归因到单个 case）")
     args = parser.parse_args(argv)
 
     secrets = _read_json(Path(args.secrets_json)) if args.secrets_json else {}
@@ -399,6 +424,8 @@ def main(argv: list[str] | None = None) -> int:
         secrets if isinstance(secrets, dict) else {},
         args.exit_code,
         shots if isinstance(shots, dict) else {},
+        args.cache_strategy,
+        args.cache_replan_count,
     )
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

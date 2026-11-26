@@ -9,7 +9,9 @@ param(
     [switch]$Authorize,
     [switch]$DryRun,
     [switch]$UpdateSuite,
-    [switch]$RerunFlaky
+    [switch]$RerunFlaky,
+    [string]$CacheStrategy = '',
+    [switch]$RebuildCache
 )
 
 $ErrorActionPreference = 'Stop'
@@ -106,6 +108,33 @@ if (-not (Test-Path -LiteralPath (Join-Path $repo '.git'))) {
     Write-Output "FAIL 不是 Git 仓库：$repo"
     exit 2
 }
+
+# ---------- 1b. L4 缓存策略 ----------
+# -RebuildCache 等价 write-only；不传任何策略时本段整体跳过，行为与原先完全一致。
+if ($RebuildCache) { $CacheStrategy = 'write-only' }
+if (-not [string]::IsNullOrWhiteSpace($CacheStrategy)) {
+    if ($CacheStrategy -notin @('read-only', 'write-only')) {
+        Write-Output "FAIL 非法 -CacheStrategy：$CacheStrategy（仅允许 read-only / write-only）"
+        exit 2
+    }
+    $suiteScript = Join-Path $PSScriptRoot 'l4_suite.py'
+    $cacheArgs = @($suiteScript, 'cache-id', '--repo-root', $repo, '--suite', $suitePath)
+    $cacheRun = Invoke-Native $py.Source $cacheArgs $repo
+    $cacheId = ''
+    if ($cacheRun.Code -eq 0) {
+        $cacheLines = @($cacheRun.Output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($cacheLines.Count -gt 0) { $cacheId = ([string]$cacheLines[0]).Trim() }
+    }
+    if ([string]::IsNullOrWhiteSpace($cacheId)) {
+        Write-Output 'FAIL 无法计算 cache id（l4_suite.py cache-id 失败）'
+        exit 2
+    }
+    $cacheDir = Join-Path (Join-Path $e2eRoot 'e2e\midscene') 'cache'
+    [System.Environment]::SetEnvironmentVariable('L4_CACHE_ID', $cacheId, 'Process')
+    [System.Environment]::SetEnvironmentVariable('L4_CACHE_STRATEGY', $CacheStrategy, 'Process')
+    [System.Environment]::SetEnvironmentVariable('L4_CACHE_DIR', $cacheDir, 'Process')
+}
+
 # 记录执行前的 git 状态，收尾只对本轮新增改动做越界校验，避免误伤历史未提交改动
 $gitBaseline = @((Invoke-Native 'git' @('-C', $repo, 'status', '--porcelain', '-uall')).Output | Where-Object { $_ })
 
@@ -208,6 +237,11 @@ if ($DryRun) {
     }
     Write-Output "运行目录：$runDir"
     Write-Output ("命令：pnpm " + ($cliArgs -join ' '))
+    if (-not [string]::IsNullOrWhiteSpace($CacheStrategy)) {
+        Write-Output "Cache ID：$cacheId"
+        Write-Output "Cache 策略：$CacheStrategy"
+        Write-Output "Cache 目录：$cacheDir"
+    }
     Write-Output 'DryRun：未写入任何文件'
     exit 0
 }
@@ -418,6 +452,29 @@ Write-Utf8 $shotsMapPath ($shotsMap | ConvertTo-Json -Depth 5)
 $summaryScript = Join-Path $PSScriptRoot 'l4_summary.py'
 $outSummary = Join-Path $roundL4 'l4-summary.json'
 $secretNames = @($secretMap.Keys) -join ','
+
+# cache-stats：仅在指定策略时生成；不传策略时零变化，不产出此文件。
+if (-not [string]::IsNullOrWhiteSpace($CacheStrategy)) {
+    $replanCount = [regex]::Matches(
+        $consoleText,
+        'will replan and disable the stale cache',
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    ).Count
+    $cacheFile = Join-Path $cacheDir ($cacheId + '.cache.yaml')
+    $cacheNote = 'hit 未采集：cache found 为 debug 日志，不进入 console.log，且无结构化命中字段；cacheReplanCases 为全局 replan 计数，无法精确归因到单个 case，故各 case 的 cacheReplan 记 false。'
+    $cacheStats = [ordered]@{
+        cacheId = $cacheId
+        strategy = $CacheStrategy
+        cacheFile = $cacheFile
+        cacheReplanCases = $replanCount
+        hit = '未采集'
+        note = $cacheNote
+    }
+    $cacheStatsPath = Join-Path $roundL4 'cache-stats.json'
+    Write-Utf8 $cacheStatsPath ($cacheStats | ConvertTo-Json -Depth 6)
+    Write-Output ("cache-stats：" + $cacheStatsPath)
+}
+
 $summaryArgs = @(
     $summaryScript,
     '--results', $resultsRoot,
@@ -429,6 +486,9 @@ $summaryArgs = @(
     '--exit-code', [string]$cliCode,
     '--secrets-env', $secretNames
 )
+if (-not [string]::IsNullOrWhiteSpace($CacheStrategy)) {
+    $summaryArgs += @('--cache-strategy', $CacheStrategy, '--cache-replan-count', [string]$replanCount)
+}
 $summaryRun = Invoke-Native $py.Source $summaryArgs $repo
 $summaryRun.Output | ForEach-Object { Write-Output (Redact-Text $_ $secretMap) }
 if ($summaryRun.Code -ne 0) {
@@ -455,9 +515,9 @@ if ($UpdateSuite) {
     foreach ($item in $summaryData.cases) {
         if (-not $item.caseId) { continue }
         if ($item.status -notin @('passed', 'failed', 'skipped')) { continue }
-        $upsertArgs = @($suiteScript, 'upsert', '--suite', $suitePath, '--case-id', [string]$item.caseId, '--status', [string]$item.status, '--authorize')
-        $upsert = Invoke-Native $py.Source $upsertArgs $repo
-        if ($upsert.Code -ne 0) { Write-Output ("WARN 回写套件失败：" + $item.caseId) }
+        $promoteArgs = @($suiteScript, 'promote', '--suite', $suitePath, '--case-id', [string]$item.caseId, '--status', [string]$item.status, '--authorize')
+        $promote = Invoke-Native $py.Source $promoteArgs $repo
+        if ($promote.Code -ne 0) { Write-Output ("WARN 回写套件失败：" + $item.caseId) }
     }
 }
 
