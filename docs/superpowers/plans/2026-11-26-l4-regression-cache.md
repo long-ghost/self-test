@@ -4,7 +4,7 @@
 
 **Goal:** 让 module-test 技能能把 L4 已通过的用例沉淀为可日常巡检的回归套件，并用 Midscene TaskCache 加速重复执行。
 
-**Architecture:** 在 suite.json 增加用例生命周期字段，用 `l4_suite.py promote/select/explain` 管理准入；新增 `l4-regression.ps1` 作为薄封装，复用 l4-run 的执行核心，向 Midscene Agent 注入 cache 参数（read-only 回归 / write-only 重建），结果归一化带缓存统计与疑点标记。所有改动同时落到技能安装目录 `~/.codebuddy/skills/module-test` 和源仓库 `E:\Desktop\module-test-public\module-test`。
+**Architecture:** 在 suite.json 增加用例生命周期字段，用 `l4_suite.py promote/select/explain` 管理准入；新增 `l4-regression.ps1` 作为薄封装，复用 l4-run 的执行核心，向 Midscene Agent 注入 cache 参数（read-only 回归 / write-only 重建），结果归一化带缓存统计与疑点标记。所有改动同时落到技能安装目录 `~/.codebuddy/skills/module-test` 和源仓库 `<repo>/module-test`。
 
 **Tech Stack:** Python 3.11（json/pathlib/argparse）、PowerShell 5.1（必须 UTF-8 BOM）、Midscene Test 1.18.2（TaskCache via Agent `cache` 选项）。
 
@@ -36,8 +36,8 @@
 ### Task 1: suite schema 与生命周期字段定义
 
 **Files:**
-- Modify: `E:\Desktop\module-test-public\module-test\assets\midscene-suite.schema.json`
-- Modify: `E:\Desktop\module-test-public\module-test\assets\cases-template.md`（如含字段说明）
+- Modify: `<repo>/module-test\assets\midscene-suite.schema.json`
+- Modify: `<repo>/module-test\assets\cases-template.md`（如含字段说明）
 
 **Interfaces:**
 - Consumes: 现有 schema 的 `caseId/file/name/tags/criterion/crossVerifiedBy/lastStatus/lastVerified/firstSeen`。
@@ -51,8 +51,8 @@ Steps:
 ### Task 2: l4_suite.py 生命周期命令与缓存 id
 
 **Files:**
-- Modify: `E:\Desktop\module-test-public\module-test\scripts\l4_suite.py`
-- Test: `E:\Desktop\module-test-public\tests\test_l4_suite_lifecycle.py`（新建，用 unittest，不依赖 pytest）
+- Modify: `<repo>/module-test\scripts\l4_suite.py`
+- Test: `<repo>/tests\test_l4_suite_lifecycle.py`（新建，用 unittest，不依赖 pytest）
 
 **Interfaces:**
 - Consumes: `load_suite(path)->dict`、`write_suite(path,suite)`、`_case_files(root)->list[Path]`、`_e2e_root(repo)->Path`、`_entry_defaults(...)`（Task 1 后）。
@@ -74,8 +74,8 @@ Steps:
 ### Task 3: runner 配置模板注入 cache
 
 **Files:**
-- Modify: `E:\Desktop\module-test-public\module-test\assets\midscene-config-template.ts`
-- Modify（安装目录同步）: `C:\Users\Administrator\.codebuddy\skills\module-test\assets\midscene-config-template.ts` 与 `C:\Users\Administrator\.codebuddy\skill-data\module-test\l4-runner\templates\midscene.config.ts`
+- Modify: `<repo>/module-test\assets\midscene-config-template.ts`
+- Modify（安装目录同步）: `~/.codebuddy/skills/module-test\assets\midscene-config-template.ts` 与 `~/.codebuddy/skill-data/module-test/l4-runner\templates\midscene.config.ts`
 
 **Interfaces:**
 - Consumes: 环境变量 `L4_CACHE_ID` / `L4_CACHE_STRATEGY` / `L4_CACHE_DIR`（Task 4 注入）。
@@ -90,8 +90,8 @@ Steps:
 ### Task 4: l4-run.ps1 缓存参数与 cacheStats
 
 **Files:**
-- Modify: `E:\Desktop\module-test-public\module-test\scripts\l4-run.ps1`
-- Modify: `C:\Users\Administrator\.codebuddy\skills\module-test\scripts\l4-run.ps1`（同步）
+- Modify: `<repo>/module-test\scripts\l4-run.ps1`
+- Modify: `~/.codebuddy/skills/module-test\scripts\l4-run.ps1`（同步）
 - Modify: `l4_summary.py`（若归一化需新增字段）
 
 **Interfaces:**
@@ -112,8 +112,8 @@ Steps:
 ### Task 5: l4-regression.ps1 回归命令
 
 **Files:**
-- Create: `E:\Desktop\module-test-public\module-test\scripts\l4-regression.ps1`
-- Create（同步）: `C:\Users\Administrator\.codebuddy\skills\module-test\scripts\l4-regression.ps1`
+- Create: `<repo>/module-test\scripts\l4-regression.ps1`
+- Create（同步）: `~/.codebuddy/skills/module-test\scripts\l4-regression.ps1`
 
 **Interfaces:**
 - Consumes: `l4_suite.py select --kind ... --out <temp>`、`l4-run.ps1 -CacheStrategy/-RebuildCache/-UpdateSuite`（Task 4）。

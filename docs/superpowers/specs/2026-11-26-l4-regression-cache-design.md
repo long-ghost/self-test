@@ -106,7 +106,7 @@
 3. 计算 cache id：**`l4-<moduleSlug>-<sha8(稳定内容)>`**（用户裁决 2026-11-26）——
    - 稳定内容 = 本轮每个用例的 `caseId + file + 该 YAML 文件内容的 sha256`，按 caseId 排序后拼接；
    - **绝不能用 suite.json 全文哈希**：`lastStatus`/`consecutivePasses` 每次回写都会变，全文哈希会让 cache id 每轮漂移、缓存永远不命中；
-   - `moduleSlug` = 模块名小写、非字母数字转 `-`（如 `D实绩首页驾驶舱` → `d----` 太短无意义，改用可读 slug：模块名映射到用例目录名，如 `001-D实绩首页驾驶舱` → `001-d` + 用例前缀小写，实现时取 `L4-DDASH` → `ddash`）；
+   - `moduleSlug` = 模块名小写、非字母数字转 `-`（如 `示例首页驾驶舱` → `d----` 太短无意义，改用可读 slug：模块名映射到用例目录名，如 `001-示例首页驾驶舱` → `001-d` + 用例前缀小写，实现时取 `L4-DDASH` → `ddash`）；
    - 用例 YAML 改动才换 id；执行状态回写不影响；`cacheDir = E2E_ROOT/e2e/midscene/cache`。
 4. 把 `L4_CACHE_ID` / `L4_CACHE_STRATEGY` / `L4_CACHE_DIR` 注入子进程环境；`read-only` 下 Midscene 只命中不改文件，`write-only` 下只写不读。
 5. 执行 Midscene（与 l4-run 同一套暂存/结果/截图/越界检查逻辑）。

@@ -49,7 +49,11 @@ class LifecycleTest(unittest.TestCase):
     def _write_case(self, case_id="L4-DDASH-001", name="登录"):
         path = self.cases_dir / f"{case_id}.yaml"
         path.write_text(
-            f"cases:\n  - name: {name}\n    tags:\n      - smoke\n",
+            f"""cases:
+  - name: {name}
+    tags:
+      - smoke
+""",
             encoding="utf-8",
         )
         return path
@@ -129,7 +133,11 @@ class LifecycleTest(unittest.TestCase):
         suite = self._suite()
         before = mod.stable_cache_id(self.base, suite)
         path.write_text(
-            "cases:\n  - name: 登录改\n    tags:\n      - regression\n",
+            """cases:
+  - name: 登录改
+    tags:
+      - regression
+""",
             encoding="utf-8",
         )
         after = mod.stable_cache_id(self.base, suite)
@@ -343,7 +351,11 @@ class LifecycleTest(unittest.TestCase):
         before = self._cache_id_cli(suite_path)
         # 只改其中一条用例的 YAML 字节，suite.json 本身不动
         (self.cases_dir / "L4-DDASH-002.yaml").write_text(
-            "cases:\n  - name: 用例2改\n    tags:\n      - smoke\n",
+            """cases:
+  - name: 用例2改
+    tags:
+      - smoke
+""",
             encoding="utf-8",
         )
         after = self._cache_id_cli(suite_path)
