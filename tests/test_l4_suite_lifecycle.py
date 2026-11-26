@@ -95,6 +95,22 @@ class LifecycleTest(unittest.TestCase):
             note=kwargs.get("note", ""),
         )
 
+    def _cache_id_cli(self, suite_path):
+        """按 l4-run.ps1 的口径，通过 CLI 计算指定套件的 cache id。"""
+        env = os.environ.copy()
+        env["E2E_ROOT"] = str(self.e2e_root)
+        env["PYTHONIOENCODING"] = "utf-8"
+        result = subprocess.run(
+            [sys.executable, "-X", "utf8", str(SUITE_SCRIPT), "cache-id",
+             "--repo-root", str(self.base), "--suite", str(suite_path)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.strip()
+
     # ---- ① 改 lastStatus 后 stable_cache_id 不变 ----
     def test_01_cache_id_ignores_last_status(self):
         self._write_case()
@@ -261,6 +277,77 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(case["maturity"], "candidate")
         self.assertEqual(case["consecutivePasses"], 0)
         self.assertEqual(case.get("confirmedBug", {}), {})
+
+    # ---- ⑪ 回归 selected 子集成员变化不影响按全量套件计算的 cache id ----
+    def test_11_selected_membership_change_keeps_full_suite_cache_id(self):
+        cases = []
+        for idx, maturity in enumerate(("stable", "confirmed-bug", "draft"), 1):
+            cid = f"L4-DDASH-{idx:03d}"
+            self._write_case(case_id=cid, name=f"用例{idx}")
+            case = {
+                "caseId": cid,
+                "file": f"cases/{cid}.yaml",
+                "name": f"用例{idx}",
+                "tags": ["smoke"],
+                "criterion": "M3",
+                "maturity": maturity,
+            }
+            if maturity == "confirmed-bug":
+                case["confirmedBug"] = {"at": "2026-11-20", "bugId": "BUG-9", "note": ""}
+            cases.append(case)
+        suite_path = self._write_suite(self._suite(cases))
+        id_full_before = self._cache_id_cli(suite_path)
+
+        # 成员变化前：回归 selected = stable + confirmed-bug（001、002）
+        sel_a = self.base / "selected-a.json"
+        mod.cmd_select(argparse.Namespace(suite=str(suite_path), kind="regression", out=str(sel_a)))
+
+        # 状态回写：003 升 stable；哨兵 002 经 fixed 退出回归集 → selected 变成 001、003
+        full = self._read_suite(suite_path)
+        full["cases"][2].update({"maturity": "stable", "lastStatus": "passed", "consecutivePasses": 3})
+        full["cases"][1].update({"maturity": "candidate", "confirmedBug": {}})
+        self._write_suite(full)
+        id_full_after = self._cache_id_cli(suite_path)
+
+        sel_b = self.base / "selected-b.json"
+        mod.cmd_select(argparse.Namespace(suite=str(suite_path), kind="regression", out=str(sel_b)))
+        ids_a = [c["caseId"] for c in json.loads(sel_a.read_text(encoding="utf-8"))["cases"]]
+        ids_b = [c["caseId"] for c in json.loads(sel_b.read_text(encoding="utf-8"))["cases"]]
+        self.assertEqual(ids_a, ["L4-DDASH-001", "L4-DDASH-002"])
+        self.assertEqual(ids_b, ["L4-DDASH-001", "L4-DDASH-003"])
+
+        # 反证：若按 selected 子集算 id，成员变化就会漂移（修复前的缺陷）
+        id_sel_a = mod.stable_cache_id(self.base, mod.load_suite(sel_a))
+        id_sel_b = mod.stable_cache_id(self.base, mod.load_suite(sel_b))
+        self.assertNotEqual(id_sel_a, id_sel_b)
+
+        # 修复口径：始终按全量套件算，成员增减 / 状态回写都不漂移
+        self.assertEqual(id_full_before, id_full_after)
+        self.assertNotEqual(id_full_before, id_sel_a)
+
+    # ---- ⑫ 全量套件中用例 YAML 变更会改变 cache id ----
+    def test_12_full_suite_case_yaml_change_changes_cache_id(self):
+        cases = []
+        for idx in (1, 2):
+            cid = f"L4-DDASH-{idx:03d}"
+            self._write_case(case_id=cid, name=f"用例{idx}")
+            cases.append({
+                "caseId": cid,
+                "file": f"cases/{cid}.yaml",
+                "name": f"用例{idx}",
+                "tags": ["smoke"],
+                "criterion": "M3",
+                "maturity": "stable",
+            })
+        suite_path = self._write_suite(self._suite(cases))
+        before = self._cache_id_cli(suite_path)
+        # 只改其中一条用例的 YAML 字节，suite.json 本身不动
+        (self.cases_dir / "L4-DDASH-002.yaml").write_text(
+            "cases:\n  - name: 用例2改\n    tags:\n      - smoke\n",
+            encoding="utf-8",
+        )
+        after = self._cache_id_cli(suite_path)
+        self.assertNotEqual(before, after)
 
 
 if __name__ == "__main__":

@@ -91,9 +91,12 @@ try {
         } else {
             $moduleNote = if ([string]::IsNullOrWhiteSpace($Module)) { '' } else { "；模块=$Module" }
             Write-Output "回归选择：$selectedCount 条（Kind=$Kind → $selectKind$moduleNote）"
+            # -Suite 传 selected 子集（决定跑哪几条）；-FullSuite 传全量套件（决定 cache id），
+            # 两者分离，避免回归成员增减导致 cache id 漂移、旧缓存整体失效。
             $childArgs = @('-NoProfile', '-File', $l4Run,
                 '-Round', $Round,
                 '-Suite', $tmpSuite,
+                '-FullSuite', $suitePath,
                 '-CacheStrategy', $CacheStrategy)
             if ($RebuildCache) { $childArgs += '-RebuildCache' }
             if (-not [string]::IsNullOrWhiteSpace($Case)) { $childArgs += @('-Case', $Case) }

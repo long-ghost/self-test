@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Round,
     [string]$RepoRoot = (Get-Location).Path,
     [string]$Suite = '',
+    [string]$FullSuite = '',
     [string]$Case = '',
     [string]$Tag = '',
     [string[]]$Secrets = @(),
@@ -89,6 +90,17 @@ if (-not (Test-Path -LiteralPath $suitePath)) {
     Write-Output "FAIL 套件不存在：$suitePath"
     exit 2
 }
+# cache id 必须基于全量套件，不能基于回归传入的 selected 子集：
+# 回归成员增减（升 stable / 哨兵 fixed）会改变 selected 子集，据此算 id 会让旧缓存整体失效。
+# 默认沿用 -Suite（普通 L4 场景 -Suite 即全量套件）；回归由 l4-regression.ps1 显式传 -FullSuite。
+$fullSuitePath = $suitePath
+if (-not [string]::IsNullOrWhiteSpace($FullSuite)) {
+    $fullSuitePath = $FullSuite
+    if (-not [System.IO.Path]::IsPathRooted($fullSuitePath)) {
+        $fullSuitePath = Join-Path $repo $fullSuitePath
+    }
+    $fullSuitePath = [System.IO.Path]::GetFullPath($fullSuitePath)
+}
 $runnerModules = Join-Path $runnerDir 'node_modules\@midscene\test'
 if (-not (Test-Path -LiteralPath $runnerModules)) {
     Write-Output "FAIL 全局 runner 未就绪：$runnerDir（先运行 l4-init.ps1 -CheckOnly）"
@@ -117,8 +129,12 @@ if (-not [string]::IsNullOrWhiteSpace($CacheStrategy)) {
         Write-Output "FAIL 非法 -CacheStrategy：$CacheStrategy（仅允许 read-only / write-only）"
         exit 2
     }
+    if (-not (Test-Path -LiteralPath $fullSuitePath)) {
+        Write-Output "FAIL 全量套件不存在：$fullSuitePath"
+        exit 2
+    }
     $suiteScript = Join-Path $PSScriptRoot 'l4_suite.py'
-    $cacheArgs = @($suiteScript, 'cache-id', '--repo-root', $repo, '--suite', $suitePath)
+    $cacheArgs = @($suiteScript, 'cache-id', '--repo-root', $repo, '--suite', $fullSuitePath)
     $cacheRun = Invoke-Native $py.Source $cacheArgs $repo
     $cacheId = ''
     if ($cacheRun.Code -eq 0) {
@@ -241,6 +257,7 @@ if ($DryRun) {
         Write-Output "Cache ID：$cacheId"
         Write-Output "Cache 策略：$CacheStrategy"
         Write-Output "Cache 目录：$cacheDir"
+        Write-Output "Cache 套件（全量）：$fullSuitePath"
     }
     Write-Output 'DryRun：未写入任何文件'
     exit 0
