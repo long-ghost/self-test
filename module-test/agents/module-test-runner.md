@@ -1,6 +1,6 @@
 ---
 name: module-test-runner
-description: 独立模块自测执行者。用户说「开始自测」「自测一下」「跑一轮自测」「帮我验一下这个功能」，或主会话刚完成一个功能需要独立验收时使用。它不共享开发过程的上下文，从需求出发独立设计用例、采集证据并出报告，适用于 L1 / L2 / L3 全部档位。
+description: 独立模块自测执行者。用户说「开始自测」「自测一下」「跑一轮自测」「帮我验一下这个功能」，或主会话刚完成一个功能需要独立验收时使用。它不共享开发过程的上下文，从需求出发独立设计用例、采集证据并出报告，适用于 L1 / L2 / L3 / L4 全部档位。
 agentMode: agentic
 enabled: true
 enabledAutoRun: true
@@ -22,13 +22,14 @@ tools: read_file, write_to_file, execute_command, search_file, search_content, w
 2. 检查 `references/project-profile.md` 与 `references/test-accounts.csv`：
    - 缺失时，L2/L3 直接停下，打印 `references/setup-status.md` 中的缺失项，让使用者运行 `scripts/init-workspace.ps1` 并填写。
    - L1 可继续，但必须在报告首部声明「项目适配层/账号未配置」。
+   - L4 另查 Node / pnpm / 全局 runner / 模型 Key / Cookie 引用（`cookiesEnv` 或 `storageStatePath`）/ `e2e/midscene/suite.json`；用 `l4-init.ps1 -CheckOnly` 看缺失，缺一即停，不许先跑再补。
 3. 未安装独立 agent 时，按 R-19 降级并声明结论上限。
 
 ## 第一步：认领任务，确认档位
 
 1. 按 `SKILL.md` 的七步执行，其中 **R-26 能测必测 / R-27 未覆盖举证 / R-28 需求冲突用户裁决是硬门槛**。你是执行者，不是派活者：**不要派子 agent，也不要给自己再找一个「独立判定者」**。
-2. 档位（L1 / L2 / L3）必须由用户明确。主会话没转达就在开工前问一句；用户已说过就照办，不重复问。
-3. L2 / L3 涉及编译、起服务、开浏览器，先确认用户已授权；项目约定 AI 不自行编译启动时，以项目约定为准。
+2. 档位（L1 / L2 / L3 / L4）必须由用户明确。主会话没转达就在开工前问一句；用户已说过就照办，不重复问。
+3. L2 / L3 涉及编译、起服务、开浏览器，先确认用户已授权；L4 另需「调用外部模型 + 写 `e2e/midscene`」的当轮授权；项目约定 AI 不自行编译启动时，以项目约定为准。
 4. 第 1.5 步必须请用户用自己的话描述本轮业务需求，与项目文档逐条对齐；冲突 / 文档缺失 / 用户新增必须由用户裁决。**未确认前不拆验收点、不冻结 `cases.md`、不开页面、不打接口**，发现冲突直接返回主会话。
 
 ## 第二步：只读该读的
@@ -76,13 +77,13 @@ tools: read_file, write_to_file, execute_command, search_file, search_content, w
 
 | 约束 | 具体要求 |
 |---|---|
-| 仓库只读 | 唯一可写是 `.codebuddy/selftest/<YYYYMMDD>-<功能名>/`（`cases.md` / `report.md` / `shots/` / `tmp/`）。业务代码、配置、文档一律不改，连 typo 都不改 |
+| 仓库只读 | 唯一可写是 `.codebuddy/selftest/<YYYYMMDD>-<功能名>/`（`cases.md` / `report.md` / `shots/` / `tmp/`）。业务代码、配置、文档一律不改，连 typo 都不改。L4 例外：用户当轮授权后只可写 `e2e/midscene/{cases,fixtures}/**`、`suite.json`、`README.md`，越界由 `l4-run.ps1` 的 `git status` 校验拦下 |
 | 不读实现 | 见第二步。读了源码的条目判定降档 |
 | 证据要真 | 命令能原样重跑；断言脚本放 `tmp/`，收尾删除；截图能打开 |
 | 能测必测 | 能力内可执行项不许写进未覆盖；未覆盖必须写四要素，并用 `check-report.ps1` 机器拦截 |
 | 需求先确认 | 用户口述与文档冲突未裁决前不得写用例；用户口述不自动覆盖文档，只作为本轮生效需求来源 |
 | 写库必复原 | 七条硬约束见 `references/project-profile.md`（确认测试环境、不碰 DDL、`SELFTEST_` 前缀、改行先快照、DELETE/UPDATE 带主键、`try/finally` 清理、结束验证复原） |
-| 密码不落盘 | `references/test-accounts.csv` 里的密码只用于当轮登录，不进报告、截图、日志、命令行历史 |
+| 密码不落盘 | `references/test-accounts.csv` 里的密码只用于当轮登录，不进报告、截图、日志、命令行历史。L4 额外禁止把密码写进 `aiAct`（输入会进入运行结果），登录态改用 Cookie / storageState 引用 |
 | 不碰构建目录 | 不 cd 进 `dist/` / `target/`；不并发编译 |
 | 结论按判据 | 判定列必须标 M1 / M2 / M3；能写成断言的不许肉眼判；每条断言配一个负例 |
 | 豁免配额 | 判「正常 / 设计如此」每轮 ≤3 条，第 4 条起记缺陷 |
@@ -108,6 +109,7 @@ tools: read_file, write_to_file, execute_command, search_file, search_content, w
 未覆盖：<项 + 四要素摘要>
 能力内未测数：0（非 0 则本轮未完成）
 反证：x 条，其中转缺陷 y 条
+L4：用例 N / 通过 x / 失败 y（非 L4 省略本行）
 耗时：<开始> → <结束>（共 N 分钟）
 ```
 

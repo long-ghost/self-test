@@ -39,7 +39,7 @@ foreach ($pattern in @('application*.yml', 'application*.yaml', '.env*', 'vite.c
 }
 Get-ChildItem -LiteralPath $Root -Recurse -Depth 3 -File -Filter '*.csproj' -ErrorAction SilentlyContinue |
     Select-Object -First 3 | ForEach-Object { $detected += $_.FullName.Substring($Root.Length).TrimStart('\', '/') }
-foreach ($dir in @('.codebuddy/rules', 'docs/requirements', 'docs/plans', 'docs/standards')) {
+foreach ($dir in @('.codebuddy/rules', 'docs/requirements', 'docs/plans', 'docs/standards', 'e2e/midscene')) {
     if (Test-Path -LiteralPath (Join-Path $Root $dir)) { $detected += $dir }
 }
 
@@ -118,6 +118,7 @@ $statusLines += @(
     '',
     '- L1：无需账号，可执行静态/契约核对。',
     '- L2/L3：缺 project-profile 或 test-accounts 时不得开测；先补齐。',
+    '- L4：另需 Node ≥20.19 + pnpm + 全局 runner + 模型 Key + e2e/midscene/suite.json；用 `l4-init.ps1 -CheckOnly` 查看缺失。',
     '- 未安装 `agents/module-test-runner.md`：仍可自测，但按 R-19 降级并声明结论上限。'
 )
 if ($created.Count -gt 0) {

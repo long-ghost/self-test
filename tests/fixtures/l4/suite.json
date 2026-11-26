@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "project": "web",
+  "module": "示例模块",
+  "cases": [
+    {
+      "caseId": "L4-DEMO-001",
+      "file": "cases/demo/L4-DEMO-001.yaml",
+      "name": "打开示例页面并确认标题",
+      "tags": ["smoke"],
+      "requirementRef": "需求原文 §1",
+      "criterion": "M3",
+      "crossVerifiedBy": ["M2：SQL 反算"],
+      "firstSeen": "2026-11-24",
+      "lastVerified": "2026-11-24",
+      "lastStatus": "passed"
+    }
+  ]
+}

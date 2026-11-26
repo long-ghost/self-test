@@ -1,7 +1,7 @@
 ---
 name: module-test
-description: 功能完成后的模块级自测（功能 + 接口）。用户说「开始自测」「自测一下」「跑一轮自测」「帮我验一下这个功能」「测试一个模块」时使用。定档定范围 → 拆五层验收点 → 按方法设计用例（期望值执行前落盘并冻结）→ 执行并出带证据的报告 → 发现缺陷自动生成可导入禅道的 bugs.xlsx 与 API/MCP payload；含同模型自测的偏差对冲（换上下文 / 换判据 / 反证 pass / 豁免配额）；测试期间仓库只读，写库必复原，判定以需求为据不以源码为据。
-version: "1.2.2"
+description: 功能完成后的模块级自测（功能 + 接口）。用户说「开始自测」「自测一下」「跑一轮自测」「帮我验一下这个功能」「测试一个模块」时使用。定档定范围 → 拆五层验收点 → 按方法设计用例（期望值执行前落盘并冻结）→ 执行并出带证据的报告 → 发现缺陷自动生成可导入禅道的 bugs.xlsx 与 API/MCP payload；含同模型自测的偏差对冲（换上下文 / 换判据 / 反证 pass / 豁免配额）；测试期间仓库只读，写库必复原，判定以需求为据不以源码为据。含 L4 Midscene Test（YAML 用例 + AI 断言 + 沉淀）。
+version: "1.3.0"
 license: MIT
 ---
 
@@ -18,7 +18,7 @@ license: MIT
 
 **不用**：改了两行的小修；只问代码怎么写；排查单个报错（那是调试）。
 
-**开测前先问档位**：L1 / L2 / L3 三选一，问清再开测，**不默认 L1**。用户已经说了档位则照办，不要重复问；只有连测什么范围都没说清时才连范围一起问。L2 / L3 涉及编译、起服务、开浏览器，需用户明确授权；项目约定 AI 不自行编译或启动服务时，以项目约定为准。
+**开测前先问档位**：L1 / L2 / L3 / L4 四选一，问清再开测，**不默认 L1**。用户已经说了档位则照办，不要重复问；只有连测什么范围都没说清时才连范围一起问。L2 / L3 涉及编译、起服务、开浏览器，需用户明确授权；L4 另需同时授权**开浏览器、调用外部模型、写 `e2e/midscene`**。项目约定 AI 不自行编译或启动服务时，以项目约定为准。
 
 **有独立 agent 就先派**：安装 `agents/module-test-runner.md` 后，主会话不自己上手，按「派谁执行」一节的规则把活交出去（R-22）。
 
@@ -31,7 +31,7 @@ license: MIT
 - 从 `code-owners.example.json` 生成 `references/code-owners.json` 草稿；有 `CODEOWNERS` 或 git 历史时可生成建议值。
 - 生成 `references/setup-status.md`，列出已探测项、待填项、缺失后影响的档位。
 
-**首次运行门禁**：`references/project-profile.md` 或 `references/test-accounts.csv` 不存在时，L2 / L3 直接停下并打印缺失清单；L1 可继续，但必须声明未配置项目适配层。未安装 `agents/module-test-runner.md` 时提醒安装；不安装则按 R-19 降级并声明结论上限。
+**首次运行门禁**：`references/project-profile.md` 或 `references/test-accounts.csv` 不存在时，L2 / L3 直接停下并打印缺失清单；L4 另需 Node / pnpm / 全局 runner / 模型 Key / `e2e/midscene/suite.json`，缺一即停；L1 可继续，但必须声明未配置项目适配层。未安装 `agents/module-test-runner.md` 时提醒安装；不安装则按 R-19 降级并声明结论上限。
 
 ## 安装与更新
 
@@ -105,7 +105,7 @@ agent 的模型当前用默认（与主模型相同），因此**同源推理盲
 | 1.5 | 用户口述需求 + 与文档对齐 + 冲突交用户裁决 | 需求确认表 + 用户确认时间 | 首部 / `cases.md` 头部 |
 | 2 | 拆五层验收点 | 验收点表 | 第二节 |
 | 3 | 按方法设计用例 + 期望值前置 | `cases.md` 冻结（含期望来源）+ 用例数 + SHA256 记入报告 | 第二节标题 |
-| 4 | 执行（静态 / 接口 / 无头 UI） | 命令与输出 | 每条结论的证据列 |
+| 4 | 执行（静态 / 接口 / 无头 UI / L4 Midscene 套件） | 命令与输出 | 每条结论的证据列 |
 | 5 | 链路三验 + 规范六类 | 三张表 + 规范表 | 三~六节 |
 | 6 | 复原、清理、反证 pass、生成缺陷记录、跑自检脚本 | 复原校验 + `git status` + 反证表 + `bugs.xlsx` / `zentao_bugs.json` + 脚本 PASS | 十、十一、十二、十三、十四节 |
 | 7 | 复盘 | `EVOLUTION.md` 追加一条（四类标签） | 不进报告，写技能目录 |
@@ -114,9 +114,10 @@ agent 的模型当前用默认（与主模型相同），因此**同源推理盲
 
 ```powershell
 python <技能目录>\scripts\report_html.py --report "<产物目录>\report.md" --cases "<产物目录>\cases.md" --bugs "<产物目录>\bugs.json" --out "<产物目录>\report.html"
+# L4 追加 --l4 "<产物目录>\l4\l4-summary.json"
 ```
 
-无缺陷时省略 `--bugs`。`report.md` 仍是 `check-report.ps1` 的机器校验底稿，HTML 只是附加阅读物，不替代十四节结构。
+无缺陷时省略 `--bugs`，非 L4 省略 `--l4`。`report.md` 仍是 `check-report.ps1` 的机器校验底稿，HTML 只是附加阅读物，不替代十四节结构。
 
 **时序硬约束（独立性）：第 1 步只看 `git diff --stat` 与文件名；第 1.5 步必须让用户口述需求并完成冲突裁决，未确认不得进入第 2 步；第 2~3 步只读需求、plan、规范、库表；`cases.md` 落盘且哈希记入报告之后，第 4 步才允许开页面与打接口。先看实现再写用例，写出来的只是实现的说明书。**
 
@@ -179,7 +180,7 @@ python <技能目录>\scripts\report_html.py --report "<产物目录>\report.md"
 
 ## 自主调查优先（默认不问）
 
-能自己查明白的一律自己查。只有四类允许停下来问：**档位未指定**（开测前的 L1/L2/L3，见「什么时候用 / 不用」）、**口径要拍板**、**要动共享文件**、**拿不到的外部条件**（密码、写库授权、只有业务方能定的「这个数对不对」）。档位之外的事项问之前，必须先查过并带上结论。
+能自己查明白的一律自己查。只有四类允许停下来问：**档位未指定**（开测前的 L1/L2/L3/L4，见「什么时候用 / 不用」）、**口径要拍板**、**要动共享文件**、**拿不到的外部条件**（密码、写库授权、只有业务方能定的「这个数对不对」）。L4 另需单独确认「外部模型调用与用例目录写入」。档位之外的事项问之前，必须先查过并带上结论。
 
 查证入口：接口签名看 Controller/DTO；表结构与数据用数据库 MCP 或 CLI；口径自己写 SQL 算一遍再和页面比；页面行为用浏览器 eval 或直接打接口；历史原因用 `git log -S` / `git blame`；规范看项目规则文件与 `<project-rules>/`；账号查项目用户表 / 部门关系表。
 
@@ -194,6 +195,7 @@ python <技能目录>\scripts\report_html.py --report "<产物目录>\report.md"
 | L1 | 不启服务：契约比对、字段链路、SQL 脚本、typecheck、构建、UI 规则代码级核对 | 2~5 min | 代码自洽；证不了交互 |
 | L2 | 启后端打接口：返回码、业务码、字段、空结果、越权 | 5~15 min | 后端行为；证不了页面 |
 | L3 | 前后端 + 无头浏览器 + 截图 | 15~40 min | 端到端 |
+| L4 | Midscene Test：真实浏览器 + YAML 用例 + AI 断言，可沉淀到 `e2e/midscene/` | 20~60 min | 可复用的端到端行为；AI 断言按 M3，数值 / 权限必须另有 M1/M2 |
 
 范围默认 = 本次 `git diff` + 最近相关 plan；**工作区干净时必须问清测哪次改动**，不能默认「最近一次提交」。
 
@@ -286,6 +288,8 @@ python <技能目录>\scripts\report_html.py --report "<产物目录>\report.md"
 
 **仓库只读**：源码、配置、文档、共享层全部只读；唯一可写是 `.codebuddy/selftest/<本轮>/`。发现问题只报告，连一行 typo 也不顺手改。
 
+**L4 例外**：仅在用户当轮授权后，允许写 `e2e/midscene/{cases,fixtures}/**`、`e2e/midscene/suite.json`、`e2e/midscene/README.md`，且只用于沉淀用例；业务源码与配置仍一律不动。`l4-run.ps1` 收尾用 `git status --porcelain` 校验，越界即退出 4、本轮作废。详见 `references/l4-midscene.md`。
+
 **写库**：可用 Python + pymysql 自助造数，无需逐次确认。七条硬约束（确认测试环境而非生产、不碰 DDL 与系统表、`SELFTEST_` 前缀、改行先快照、DELETE/UPDATE 必带主键、`try/finally` 清理、结束验证复原）见 `project-profile.md`。
 
 **产物**：`.codebuddy/selftest/<YYYYMMDD>-<功能名>/` 下只留 `cases.md`（冻结件）、`report.md`、`shots/`；`report.html` 是第 6 步由 `scripts/report_html.py` 生成的附加阅读物；有缺陷时加 `bugs.json`、`bugs.xlsx`、`zentao_bugs.json`。`report.md` 保持为 `check-report.ps1` 的机器校验底稿，不因 HTML 生成而删改。收尾六问：脚本 PASS、`git status` 干净、目录只剩允许的产物、服务与端口已释放、复盘已写、缺陷单已生成并核对字段。
@@ -362,8 +366,10 @@ python <技能目录>\scripts\bug_report.py `
 - 期望值被实测值覆盖且未留更正依据 → 本轮证据不可信，结论最高只给「有条件通过」
 - 禁止措辞：应该、大概、似乎、看起来、基本没问题
 - 发现 P0 不要停，跑完再单列（半途停会漏掉其他问题），结论直接判「不通过」
+- **L4**：AI 断言一律 M3；数值 / 金额 / 条数 / 权限 / 占比类结论没有 M1/M2 交叉核验，该条上限「有条件通过」；M3 占比仍按现有规则计
+- **L4**：模型抖动导致同一用例两轮结论不同，必须写「不稳定」并保留两轮证据，不许只留通过的一轮
 
-**结论强度取三者最低**：档位（L1 静态自洽 / L2 后端行为 / L3 端到端可用）× 执行形态（独立 agent 或新会话 ≤ 通过；同会话 ≤ 有条件通过；agent 降级 ≤ 有条件通过）× 判据构成（M3 >50% ≤ 有条件通过）。
+**结论强度取三者最低**：档位（L1 静态自洽 / L2 后端行为 / L3 端到端可用 / L4 可复用端到端 + AI 断言）× 执行形态（独立 agent 或新会话 ≤ 通过；同会话 ≤ 有条件通过；agent 降级 ≤ 有条件通过）× 判据构成（M3 >50% ≤ 有条件通过）。
 
 ## 报告
 
@@ -374,6 +380,8 @@ python <技能目录>\scripts\bug_report.py `
 ```
 
 `测试耗时` 必须写真实起止时间：开始=确认档位与范围，结束=报告定稿；禁止估算或按文件时间倒推。
+
+**L4 报告**：十四节结构不变，另在首部加 `**L4 套件冻结**` / `**L4 执行**` 两行，文末追加「十五、L4 端到端（Midscene）」（格式见 `assets/report-template.md`）。非 L4 报告删除这两行且不出现第十五节，`check-report.ps1` 据此区分。HTML 用 `report_html.py --l4` 生成附加视图。
 
 ## 红线
 
@@ -420,6 +428,14 @@ python <技能目录>\scripts\bug_report.py `
 | `references/test-accounts.csv` | L2 / L3 开测前挑登录账号（**本机敏感文件，转发前脱敏**） |
 | `assets/cases-template.md` | 第二步写用例、冻结前直接复制 |
 | `assets/report-template.md` | 写报告时直接复制 |
+| `assets/midscene-cases-template.yaml` | L4 写 YAML 用例、沉淀前复制 |
+| `assets/midscene-config-template.ts` | L4 runner 配置模板（`l4-init.ps1` 使用） |
+| `assets/midscene-suite.schema.json` | L4 `suite.json` 字段定义 |
+| `references/l4-midscene.md` | L4 开测前必读：YAML 规则 / 套件沉淀 / 安全红线 / 降级条件 |
+| `scripts/l4-init.ps1` | L4 首次初始化与预检（`-CheckOnly` / `-Install` / `-ModelVerify`） |
+| `scripts/l4-run.ps1` | L4 执行、暂存、归档结果与越界校验 |
+| `scripts/l4_suite.py` | L4 套件 `collect` / `upsert` / `export` |
+| `scripts/l4_summary.py` | L4 结果归一化与脱敏 |
 | `assets/bug-record-template.json` | 发现缺陷后复制成 `bugs.json` 填单 |
 | `references/bug-report.md` | 缺陷字段、Excel 列、禅道 API/MCP 对接细节 |
 | `references/code-owners.json` | 模块/路径 → 责任人映射（用户后续维护） |

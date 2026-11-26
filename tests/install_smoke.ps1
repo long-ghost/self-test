@@ -54,6 +54,9 @@ try {
     }
     Assert-True ($null -ne $manifest -and $manifest.commit.Length -ge 7) '写入安装记录与提交号'
     Assert-True (Test-Path -LiteralPath (Join-Path $agentDir 'module-test-runner.md')) '安装独立 agent'
+    Assert-True (Test-Path -LiteralPath (Join-Path $skillDir 'scripts/l4-run.ps1')) '安装后存在 L4 执行脚本'
+    Assert-True (Test-Path -LiteralPath (Join-Path $skillDir 'references/l4-midscene.md')) '安装后存在 L4 参考文档'
+    Assert-True (Test-Path -LiteralPath (Join-Path $skillDir 'assets/midscene-suite.schema.json')) '安装后存在 L4 套件 schema'
 
     $installedVersion = $manifest.version
     $localConfig = Join-Path $skillDir 'references/test-accounts.csv'

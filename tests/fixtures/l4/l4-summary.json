@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "runId": "fixture-run",
+  "suiteSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "exitCode": 0,
+  "counts": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0
+  },
+  "cases": [
+    {
+      "caseId": "L4-DEMO-001",
+      "name": "打开示例页面并确认标题",
+      "file": "cases/demo/L4-DEMO-001.yaml",
+      "status": "passed",
+      "criterion": "M3",
+      "crossVerifiedBy": ["M2：SQL 反算"],
+      "steps": [
+        { "index": 1, "node": "aiAct", "status": "passed", "error": "" },
+        { "index": 2, "node": "aiAssert", "status": "passed", "error": "" }
+      ],
+      "failedStep": null,
+      "screenshots": ["shots/demo.png"],
+      "evidenceLevel": "M3",
+      "unmapped": false
+    }
+  ],
+  "stagedFiles": [
+    {
+      "caseId": "L4-DEMO-001",
+      "source": "e2e/midscene/cases/demo/L4-DEMO-001.yaml",
+      "staged": "cases/demo/L4-DEMO-001.yaml",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+  ],
+  "redacted": ["MIDSCENE_MODEL_API_KEY"]
+}

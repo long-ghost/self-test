@@ -1,0 +1,29 @@
+# Midscene Test 用例模板
+# 契约：一个 YAML 文件只放一条用例；file 与 suite.json 里的 caseId / name 一一对应。
+# 沉淀位置：业务仓库 e2e/midscene/cases/<模块>/<caseId>.yaml
+# 安全：禁止写 password / token / cookie 明文；登录态用 setCookies 引用环境变量或 storageState。
+# 步骤之间没有隐式状态，每条自然语言指令都要写全目标，禁止「上一步」「刚才那个」。
+beforeEach:
+  - setViewportSize:
+      width: 1440
+      height: 900
+  - clearCookies: {}
+  # 三选一：cookiesEnv / profile / storageStatePath
+  # cookiesEnv 由 l4-run 从 -Secrets 或 runner .env 注入，只注入不落盘
+  - setCookies:
+      cookiesEnv: L4_COOKIES
+  - gotoUrl: https://example.com/
+cases:
+  - name: 示例：打开首页并确认标题
+    tags: [smoke, demo]
+    steps:
+      - aiWaitFor: 页面主要内容加载完成
+      - aiAssert:
+          prompt: 页面标题区域显示 "Example Domain"
+          message: 首页标题不符合预期
+      # 步骤级控制：$ 由框架处理，不传给 Node
+      # - aiAct:
+      #     prompt: 点击页面上的 "More information..."
+      #     $:
+      #       timeout: 30000
+      #       continue-on-error: false

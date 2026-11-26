@@ -41,7 +41,7 @@ powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/update.
 - 「跑一轮自测」
 - 「帮我验一下这个功能」
 
-开测前先确认档位：L1 静态 / L2 接口 / L3 端到端。L2/L3 需要用户授权编译、起服务、开浏览器。
+开测前先确认档位：L1 静态 / L2 接口 / L3 端到端 / L4 Midscene。L2/L3 需要用户授权编译、起服务、开浏览器；L4 另需授权调用外部模型与写 `e2e/midscene`。
 
 报告首部必须写 `**测试耗时**：<开始> → <结束>（共 N 分钟）`，口径是从确认档位与范围到报告定稿；HTML 顶栏会显示总耗时。
 
@@ -74,6 +74,29 @@ python scripts/report_html.py --report "<产物>/report.md" --cases "<产物>/ca
 ```
 
 有缺陷时追加 `--bugs "<产物>/bugs.json"`。生成 `bugs.xlsx` 前安装依赖：`python -m pip install -r requirements.txt`。
+
+## 4.1 L4 Midscene Test（可选档位）
+
+前置：Node `^20.19 || ^22.12 || >=24`、pnpm、Chromium、模型 Key；详见 `references/l4-midscene.md`。
+
+```powershell
+# 1. 初始化全局 runner（0 就绪 / 2 缺前置 / 1 出错）
+powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/l4-init.ps1" -CheckOnly
+powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/l4-init.ps1" -Install
+# 2. 写用例：e2e/midscene/cases/<模块>/<caseId>.yaml（一个文件一条，模板见 assets/midscene-cases-template.yaml）
+# 3. 冻结套件（无 -Authorize 只打印差异）
+python "$HOME/.codebuddy/skills/module-test/scripts/l4_suite.py" collect --repo-root . --module <模块名> --authorize
+# 4. 执行（-DryRun 只打印暂存树与命令）
+powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/l4-run.ps1" `
+  -Round ".codebuddy/selftest/<本轮>" -Authorize -UpdateSuite
+# 5. 生成带 L4 区块的 HTML
+python scripts/report_html.py --report "<产物>/report.md" --cases "<产物>/cases.md" --l4 "<产物>/l4/l4-summary.json" --out "<产物>/report.html"
+```
+
+- 产物：`<本轮>/l4/l4-summary.json`、`l4/midscene/{result.md,summary.json,report.html}`、`shots/l4/<caseId>-stepN.png`。
+- 用户授权后只可写 `e2e/midscene/{cases,fixtures}/**`、`suite.json`、`README.md`；`l4-run.ps1` 用 `git status` 校验越界。
+- 退出码：0 全通过 / 1 有失败 / 2 缺前置 / 3 未授权 / 4 暂存或套件非法。
+- 用例手工维护规则不变：新增/修改用例后重新 `collect` 冻结；`lastStatus` 由 `-UpdateSuite` 回写。
 
 ## 5. 安全规则
 

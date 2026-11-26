@@ -1,6 +1,7 @@
 ﻿param(
     [Parameter(Mandatory = $true)][string]$Report,
-    [string]$Skill = ''
+    [string]$Skill = '',
+    [string]$RepoRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -233,9 +234,146 @@ foreach ($ref in $shotRefs) {
     if (-not (Test-Path -LiteralPath $p)) { $fail += "截图不存在：$ref" }
 }
 
+# ---------- 8. L4 档位（仅首部出现「L4 套件冻结」时校验） ----------
+# 只认行首字段，避免报告模板里的说明性引用被误判为 L4
+$isL4 = $text -match '(?m)^\*\*L4 套件冻结\*\*'
+$l4CaseCount = 0
+if ($isL4) {
+    if ($text -notmatch '###\s*十五、') { $fail += '缺章节：### 十五、（L4）' }
+
+    foreach ($rel in @('l4\l4-summary.json', 'l4\midscene\result.md', 'l4\midscene\summary.json')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $reportDir $rel))) {
+            $fail += ('L4 缺产物：' + ($rel -replace '\\', '/'))
+        }
+    }
+
+    $l4Summary = $null
+    $summaryPath = Join-Path $reportDir 'l4\l4-summary.json'
+    if (Test-Path -LiteralPath $summaryPath) {
+        try { $l4Summary = Get-Content -LiteralPath $summaryPath -Raw -Encoding UTF8 | ConvertFrom-Json }
+        catch { $fail += 'l4/l4-summary.json 无法解析' }
+    }
+
+    $rootCandidate = $RepoRoot
+    if ([string]::IsNullOrWhiteSpace($rootCandidate)) { $rootCandidate = $reportDir }
+    $candidate = [System.IO.Path]::GetFullPath($rootCandidate).TrimEnd('\', '/')
+    $suitePath = ''
+    while ($candidate) {
+        $probe = Join-Path $candidate 'e2e\midscene\suite.json'
+        if (Test-Path -LiteralPath $probe) { $suitePath = $probe; break }
+        $parent = Split-Path -Parent $candidate
+        if (-not $parent -or $parent -eq $candidate) { break }
+        $candidate = $parent
+    }
+
+    $suiteIds = @()
+    if (-not $suitePath) {
+        $fail += 'L4 找不到 e2e/midscene/suite.json（可用 -RepoRoot 指定仓库根）'
+    } else {
+        try {
+            $suiteData = Get-Content -LiteralPath $suitePath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $suiteIds = @($suiteData.cases | ForEach-Object { [string]$_.caseId })
+        } catch {
+            $fail += 'L4 suite.json 无法解析'
+        }
+        $suiteHash = (Get-FileHash -LiteralPath $suitePath -Algorithm SHA256).Hash.Substring(0, 16).ToLower()
+        if ($text -notmatch '\*\*L4 套件冻结\*\*[^\r\n]*?SHA256\s*[:：]?\s*([0-9a-fA-F]{16})') {
+            $fail += '首部缺「L4 套件冻结 SHA256」'
+        } else {
+            $declaredSuiteHash = $Matches[1].ToLower()
+            if ($declaredSuiteHash -ne $suiteHash) {
+                $fail += "L4 套件哈希不一致：声明 $declaredSuiteHash / 实际 $suiteHash"
+            }
+        }
+    }
+
+    $l4ExecLine = $lines | Where-Object { $_ -match '^\*\*L4 执行\*\*' } | Select-Object -First 1
+    if (-not $l4ExecLine) {
+        $fail += '首部缺「L4 执行」'
+    } else {
+        $execMatch = [regex]::Match(
+            $l4ExecLine,
+            '^\*\*L4 执行\*\*[：:]\s*用例\s*(\d+)\s*/\s*通过\s*(\d+)\s*/\s*失败\s*(\d+)\s*/\s*跳过\s*(\d+)\s*（exit\s*([0-9]+)'
+        )
+        if (-not $execMatch.Success) {
+            $fail += '「L4 执行」格式错误：应为 用例 N / 通过 x / 失败 y / 跳过 z（exit 0|1；模型 …，密钥已隐藏）'
+        } else {
+            $declared = @(
+                [int]$execMatch.Groups[1].Value,
+                [int]$execMatch.Groups[2].Value,
+                [int]$execMatch.Groups[3].Value,
+                [int]$execMatch.Groups[4].Value
+            )
+            $declaredExit = [int]$execMatch.Groups[5].Value
+            if ($l4Summary) {
+                $actual = @(
+                    [int]$l4Summary.counts.total,
+                    [int]$l4Summary.counts.passed,
+                    [int]$l4Summary.counts.failed,
+                    [int]$l4Summary.counts.skipped
+                )
+                $labels = @('用例', '通过', '失败', '跳过')
+                for ($i = 0; $i -lt 4; $i++) {
+                    if ($declared[$i] -ne $actual[$i]) {
+                        $fail += ("L4 执行与 l4-summary.json 不一致：$($labels[$i]) 声明 $($declared[$i]) / 实际 $($actual[$i])")
+                    }
+                }
+                if ([int]$l4Summary.exitCode -eq 0 -and $actual[2] -gt 0) {
+                    $fail += 'L4 exitCode 为 0 但存在失败用例'
+                }
+                if (-not ($declaredExit -eq [int]$l4Summary.exitCode)) {
+                    $fail += "L4 执行 exitCode 与 l4-summary.json 不一致：声明 $declaredExit / 实际 $($l4Summary.exitCode)"
+                }
+            }
+        }
+    }
+
+    $s15Start = ($lines | Select-String -Pattern '^###\s*十五、' | Select-Object -First 1).LineNumber
+    if ($s15Start) {
+        $s15Rows = @()
+        for ($i = $s15Start; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^###\s') { break }
+            if ($lines[$i] -match '^\|') { $s15Rows += $lines[$i] }
+        }
+        foreach ($row in $s15Rows) {
+            $cells = $row -split '\|'
+            if ($cells.Count -lt 8) { continue }
+            $caseId = $cells[1].Trim().Trim('`')
+            $assertion = $cells[2].Trim()
+            $criterion = $cells[3].Trim()
+            $cross = $cells[4].Trim()
+            $evidence = $cells[6].Trim()
+            if ([string]::IsNullOrWhiteSpace($caseId) -or $caseId -match '^-+$') { continue }
+            if ($caseId -eq '用例编号') { continue }
+            $l4CaseCount++
+            if ($suiteIds.Count -gt 0 -and ($suiteIds -notcontains $caseId)) {
+                $fail += "十五节用例编号不在 suite.json 中：$caseId"
+            }
+            if ($criterion -notmatch '^(M1|M2|M3)$') {
+                $fail += "十五节判据必须是 M1/M2/M3：$caseId → $criterion"
+            }
+            if ($criterion -eq 'M3' -and $assertion -match '数值|金额|条数|权限|占比') {
+                if ([string]::IsNullOrWhiteSpace($cross) -or $cross -match '^[—\-/]+$') {
+                    $fail += "十五节 M3 断言含数值/金额/条数/权限/占比，但缺 M1/M2 交叉核验：$caseId"
+                }
+            }
+            foreach ($match in [regex]::Matches($evidence, '(?:l4|shots)/[^\s`\)\|，。]+')) {
+                $ref = $match.Value
+                $path = Join-Path $reportDir ($ref -replace '/', '\')
+                if (-not (Test-Path -LiteralPath $path)) {
+                    $fail += "十五节引用的证据不存在：$ref"
+                }
+            }
+        }
+        if ($l4CaseCount -eq 0) { $fail += '十五节没有可校验的用例行' }
+    }
+}
+
 # ---------- 输出 ----------
 if ($fail.Count -eq 0) {
-    Write-Output ("PASS: 结构完整（14 节 + {0} 条规则 + 用例数 + 覆盖数 + 五层 + 复原 + cases.md 冻结哈希一致 + 缺陷记录产物 + {1} 张截图）" -f $ruleIds.Count, $shotRefs.Count)
+    $extra = ''
+    if ($isL4) { $extra = " + L4 $l4CaseCount 条" }
+    Write-Output ("PASS: 结构完整（14 节 + {0} 条规则 + 用例数 + 覆盖数 + 五层 + 复原 + cases.md 冻结哈希一致 + 缺陷记录产物 + {1} 张截图{2}）" -f $ruleIds.Count, $shotRefs.Count, $extra)
     exit 0
 }
 

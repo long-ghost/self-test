@@ -135,6 +135,22 @@ details.chapter summary { cursor:pointer; color:var(--muted); }
 .chapter-body code { background:#EEF2F3; padding:1px 4px; font-family:Consolas,monospace; }
 .chapter-body pre { background:#EEF2F3; padding:8px; white-space:pre-wrap; overflow-x:auto; }
 .chapter-body blockquote { border-left:3px solid var(--green); margin:6px 0; padding-left:10px; color:var(--muted); }
+.l4 { margin-top:34px; border-top:1px solid var(--line); padding-top:18px; }
+.l4 h2 { font-size:16px; margin:0; }
+.l4 .l4-hint { font-size:10px; color:var(--muted); margin-top:4px; line-height:1.6; }
+.l4-counts { display:flex; gap:7px; flex-wrap:wrap; margin:12px 0; }
+.l4-counts .metric { font-family:Bahnschrift,Consolas,monospace; }
+.l4-counts .metric.bad { background:#FBEDEC; border-color:var(--gap); color:var(--gap); }
+.l4-table { width:100%; border-collapse:collapse; font-size:11px; background:#fff; border:1px solid var(--line); }
+.l4-table th { background:#EEF2F3; text-align:left; }
+.l4-table th,.l4-table td { border:1px solid var(--line); padding:5px 7px; vertical-align:top; }
+.l4-fail { margin-top:12px; font-size:11px; color:#2A3A44; }
+.l4-fail .k { color:var(--gap); font-weight:700; margin-right:6px; }
+.l4-shots { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+.l4-shots a { display:block; border:1px solid var(--line); background:#fff; padding:3px; }
+.l4-shots img { display:block; max-width:200px; max-height:120px; }
+.l4-links { margin-top:12px; font-size:11px; }
+.l4-links a { margin-right:14px; }
 @media (max-width:760px) { .sheet{padding:20px 16px} .hero{grid-template-columns:1fr;gap:20px}
   .verdict{font-size:30px} .search{margin-left:0} }
 @media (prefers-reduced-motion:reduce) { *{transition:none!important} }
@@ -622,11 +638,89 @@ def _bar_counts(header: dict, cases: list[dict[str, str]]) -> dict[str, int]:
     return _counts(cases)
 
 
+def _l4_section(l4: dict) -> str:
+    counts = l4.get("counts") or {}
+    cases = l4.get("cases") or []
+    suite_hash = str(l4.get("suiteSha256") or "")[:16]
+    status_cn = {"passed": "通过", "failed": "失败", "skipped": "跳过", "missing": "缺失"}
+    out = [
+        "<section class='l4' id='l4'>",
+        "<h2>L4 端到端（Midscene）</h2>",
+        "<div class='l4-hint'>AI 断言一律 M3；数值 / 金额 / 条数 / 权限 / 占比类结论需另有 M1/M2 交叉核验，否则该条只能「有条件通过」。</div>",
+        "<div class='l4-counts'>",
+        "<span class='metric'>用例 " + str(counts.get("total", len(cases))) + "</span>",
+        "<span class='metric'>通过 " + str(counts.get("passed", 0)) + "</span>",
+        "<span class='metric" + (" bad" if int(counts.get("failed", 0) or 0) > 0 else "") + "'>失败 "
+        + str(counts.get("failed", 0)) + "</span>",
+        "<span class='metric'>跳过 " + str(counts.get("skipped", 0)) + "</span>",
+        "<span class='metric'>exit " + str(l4.get("exitCode", "")) + "</span>",
+    ]
+    if suite_hash:
+        out.append("<span class='metric'>套件 " + _esc(suite_hash) + "</span>")
+    out.append("</div>")
+    if cases:
+        out.extend([
+            "<table class='l4-table'><thead><tr>",
+            "<th>用例编号</th><th>业务断言</th><th>判据</th><th>交叉核验</th><th>结果</th>",
+            "</tr></thead><tbody>",
+        ])
+        for case in cases:
+            status = str(case.get("status", ""))
+            label = status_cn.get(status, status or "—")
+            criterion = str(case.get("criterion") or case.get("evidenceLevel") or "M3")
+            cross = "；".join(str(item) for item in case.get("crossVerifiedBy") or []) or "—"
+            out.append(
+                "<tr><td>" + _esc(case.get("caseId", "—"))
+                + "</td><td>" + _esc(case.get("name", "—"))
+                + "</td><td>" + _esc(criterion)
+                + "</td><td>" + _esc(cross)
+                + "</td><td>" + _esc(label + " " + criterion) + "</td></tr>"
+            )
+        out.append("</tbody></table>")
+    else:
+        out.append("<div class='empty'>l4-summary.json 没有可展示的用例。</div>")
+
+    failures = [case for case in cases if case.get("failedStep")]
+    if failures:
+        out.append("<div class='l4-fail'>")
+        for case in failures:
+            step = case.get("failedStep") or {}
+            out.append(
+                "<div><span class='k'>失败步骤</span>" + _esc(case.get("caseId", "")) + " / "
+                + _esc("步骤 " + str(step.get("index", ""))) + " "
+                + _esc(step.get("node", "")) + " / "
+                + _esc(step.get("error", "") or "无报错文本") + "</div>"
+            )
+        out.append("</div>")
+
+    shots: list[str] = []
+    for case in cases:
+        for shot in case.get("screenshots") or []:
+            if shot and shot not in shots:
+                shots.append(str(shot))
+    if shots:
+        out.append("<div class='l4-shots'>")
+        for shot in shots:
+            out.append(
+                "<a href='" + _safe_url(shot) + "'><img src='" + _safe_url(shot) + "' alt='L4 步骤截图'></a>"
+            )
+        out.append("</div>")
+
+    out.append(
+        "<div class='l4-links'><a href='" + _safe_url("l4/midscene/report.html") + "'>Midscene 原始报告</a>"
+        "<a href='" + _safe_url("l4/midscene/result.md") + "'>result.md</a>"
+        "<a href='" + _safe_url("l4/l4-summary.json") + "'>l4-summary.json</a></div>"
+    )
+    out.append("</section>")
+    return "\n".join(out)
+
+
 def render_html(
     header: dict,
     cases: list[dict],
     sections: dict[str, str],
     bugs: list[dict],
+    l4: dict | None = None,
 ) -> str:
     gap = _gap_count(header, cases)
     counts = _bar_counts(header, cases)
@@ -652,7 +746,12 @@ def render_html(
         "<style>" + CSS + "</style></head><body><main class='sheet'>",
         "<div class='topline'><span class='name'>自测报告 · " + _esc(header.get("范围", "本次改动")[:42]) + "</span>",
         "<span class='duration' title='" + _esc(_duration_title(header)) + "'>" + _esc(_duration_text(header)) + "</span>",
-        "<span class='hash'>清单 " + _esc(_hash16(header)) + "</span></div>",
+        "<span class='hash'>清单 " + _esc(_hash16(header)) + "</span>",
+    ]
+    if l4:
+        out.append("<span class='hash'>L4 套件 " + _esc(str(l4.get("suiteSha256") or "")[:16] or "—") + "</span>")
+    out.extend([
+        "</div>",
         "<section class='hero'><div class='verdict-panel'>",
         "<div class='eyebrow'>测试结论</div>",
         "<div class='verdict'>" + _esc(test_verdict) + "</div>",
@@ -661,7 +760,7 @@ def render_html(
         "<h3>风险 · 单独列示</h3>",
         "<div class='risk-summary'>影响大 " + str(high_risks)
         + " · 可手动补测 " + str(low_risks) + " · 不参与主结论</div>",
-    ]
+    ])
     for item in gaps:
         level = _impact(item)
         cls = "big" if level == "大" else "small"
@@ -740,6 +839,8 @@ def render_html(
     out.append("</div></section>")
 
     out.append(_defect_section(bugs))
+    if l4:
+        out.append(_l4_section(l4))
 
     out.append("<section class='chapters'><h2>完整报告章节</h2>")
     for title, content in sections.items():
@@ -758,6 +859,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report", required=True)
     parser.add_argument("--cases", required=True)
     parser.add_argument("--bugs")
+    parser.add_argument("--l4")
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
 
@@ -782,8 +884,17 @@ def main(argv: list[str] | None = None) -> int:
     header = parse_header(report_text)
     header["_hash16"] = hashlib.sha256(cases_path.read_bytes()).hexdigest()[:16]
     header.setdefault("用例冻结", "SHA256 " + header["_hash16"])
+    l4: dict | None = None
+    if args.l4:
+        l4_path = Path(args.l4)
+        if l4_path.is_file():
+            data = json.loads(l4_path.read_text(encoding="utf-8-sig"))
+            l4 = data if isinstance(data, dict) else None
+        else:
+            print(f"l4 summary not found: {l4_path}", file=sys.stderr)
+            return 2
     out_path.write_text(
-        render_html(header, parse_cases(report_text), _parse_sections(report_text), bugs),
+        render_html(header, parse_cases(report_text), _parse_sections(report_text), bugs, l4),
         encoding="utf-8",
     )
     print(f"wrote {out_path}")

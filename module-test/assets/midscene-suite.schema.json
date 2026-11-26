@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/long-ghost/self-test/module-test/assets/midscene-suite.schema.json",
+  "title": "module-test L4 Midscene 套件清单",
+  "description": "业务仓库 e2e/midscene/suite.json 的唯一套件清单；一个 YAML 文件只放一条用例。",
+  "type": "object",
+  "required": ["schemaVersion", "project", "module", "cases"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "project": {
+      "type": "string",
+      "description": "midscene.config.ts 中的 Execution Project 名称，默认 web"
+    },
+    "module": {
+      "type": "string",
+      "description": "本轮被测模块名"
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["caseId", "file", "name", "tags", "criterion"],
+        "additionalProperties": false,
+        "properties": {
+          "caseId": {
+            "type": "string",
+            "pattern": "^L4-[A-Z0-9]+-\\d{3}$",
+            "description": "用例编号，L4-<模块码>-NNN；默认与文件名一致"
+          },
+          "file": {
+            "type": "string",
+            "pattern": "^cases/.+\\.(yaml|yml)$",
+            "description": "相对 e2e/midscene 的用例文件路径"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "与 YAML 中 cases[0].name 完全一致"
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "requirementRef": {
+            "type": "string",
+            "description": "需求原文出处，例如「需求原文 §2.1」"
+          },
+          "criterion": {
+            "type": "string",
+            "enum": ["M1", "M2", "M3"],
+            "description": "判据等级；L4 的 AI 断言默认 M3"
+          },
+          "crossVerifiedBy": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "数值/金额/条数/权限/占比类断言的 M1/M2 独立核验来源"
+          },
+          "firstSeen": {
+            "type": "string",
+            "description": "首次纳入套件的日期 YYYY-MM-DD"
+          },
+          "lastVerified": {
+            "type": "string",
+            "description": "最近一次执行日期 YYYY-MM-DD"
+          },
+          "lastStatus": {
+            "type": "string",
+            "enum": ["passed", "failed", "skipped"]
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

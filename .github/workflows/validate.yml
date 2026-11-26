@@ -19,6 +19,9 @@ jobs:
       - name: Install/update smoke test
         shell: pwsh
         run: ./tests/install_smoke.ps1
+      - name: Check report smoke test
+        shell: pwsh
+        run: ./tests/check_report_smoke.ps1
       - name: Sanitize check
         shell: pwsh
         run: ./scripts/sanitize_check.ps1

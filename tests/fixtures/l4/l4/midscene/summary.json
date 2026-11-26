@@ -1,0 +1,14 @@
+{
+  "runId": "fixture-run",
+  "cases": [
+    {
+      "name": "打开示例页面并确认标题",
+      "file": "cases/demo/L4-DEMO-001.yaml",
+      "status": "passed",
+      "steps": [
+        { "index": 1, "node": "aiAct", "status": "passed" },
+        { "index": 2, "node": "aiAssert", "status": "passed" }
+      ]
+    }
+  ]
+}

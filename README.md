@@ -2,6 +2,8 @@
 
 `module-test` 是一个可独立维护与发布的模块级自测技能：从需求确认、用例冻结，到接口/页面验证、证据报告、缺陷记录和 HTML 视图。
 
+自 v1.3.0 起可选启用 L4 Midscene Test 端到端档位（YAML 用例 + AI 断言），前置为 Node ≥20.19、pnpm、全局 runner 与模型 Key，用 `l4-init.ps1 -CheckOnly` 查看缺失。
+
 ## 仓库结构
 
 ```text

@@ -3,6 +3,12 @@
 > 只记有证据的改进，append-only。格式与判定见 `references/retrospective.md`。
 > 合并进技能后才升版本；本文件本身不决定版本号。
 
+## 2026-11-24 新增 L4 Midscene 端到端档位（v1.3.0）
+
+- **来源**：L3 依赖临时脚本与 DOM 选择器，语义化页面维护成本高，也不沉淀资产；用户要求用 Midscene Test 写 YAML 用例并沉淀到业务仓库。
+- **改动**：新增 L4 档位与 `l4-init.ps1` / `l4-run.ps1` / `l4_suite.py` / `l4_summary.py`；套件清单 `e2e/midscene/suite.json` 强制一文件一用例；全局 runner 隔离 `node_modules`；报告新增十五节与首部两行；`check-report.ps1` 与 `report_html.py` 增加 L4 分支。
+- **待观察**：Midscene Beta 的 `summary.json` 字段随版本漂移，`l4_summary.py` 的多形状容错需在真实运行后校准；AI 抖动与真缺陷的定性是否稳定；Cookie/storageState 引用能否覆盖多数登录场景。
+
 ## 2026-11-24 报告安全与可读性收尾（v1.2.2）
 
 - **来源**：上一轮独立评审留下两项 Minor（风险指标无样式、协议相对外链白名单过宽），用户另要求缺陷逐条折叠、四类色块拉开差异。

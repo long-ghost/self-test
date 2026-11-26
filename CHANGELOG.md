@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.3.0 — 2026-11-24
+
+- 新增 L4 档位：Midscene Test AI 驱动端到端测试（YAML 用例 + 自然语言步骤 + AI 断言），用例沉淀到业务仓库 `e2e/midscene/`。
+- 新增 `scripts/l4-init.ps1`：检查 Node/pnpm/Chromium/模型 Key，`-Install` 安装依赖与 `node-spec.md`，`-ModelVerify` 验证模型连通性。
+- 新增 `scripts/l4-run.ps1`：套件选择、每轮暂存到全局 runner、执行、归档结果/截图、`git status` 越界校验；运行前校验 `cookiesEnv` / `storageStatePath`，缺失退出 2；退出码 0/1/2/3/4。
+- 新增 `scripts/l4_suite.py`（collect/upsert/export）与 `scripts/l4_summary.py`（多形状归一化、脱敏、unmapped 检测）。
+- 新增资产 `midscene-cases-template.yaml` / `midscene-config-template.ts` / `midscene-suite.schema.json` 与 `references/l4-midscene.md`。
+- 报告模板增加 L4 首部两行与「十五、L4 端到端（Midscene）」；`check-report.ps1` 增加 L4 分支（suite 哈希、计数一致性、判据与交叉核验、证据存在性）。
+- `report_html.py` 支持 `--l4`，新增 L4 区块与套件哈希，非 L4 输出不变。
+- 独立 agent、SKILL、usage、README 同步 L4；新增 `tests/check_report_smoke.ps1` 与 L4 fixtures。
+
 ## v1.2.2 — 2026-11-24
 
 - 修复协议相对外链与 UNC 路径被当作本地图片加载的问题。

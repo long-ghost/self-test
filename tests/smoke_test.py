@@ -1,9 +1,11 @@
 import importlib.util
+import json
 import os
 import pathlib
 import re
 import subprocess
 import sys
+import tempfile
 
 sys.dont_write_bytecode = True
 
@@ -52,6 +54,71 @@ def test_html_report_renders_offline():
     assert "测试通过" in html
     assert "module-test" in html or "自测报告" in html
     assert "http://" not in html and "https://" not in html
+
+
+def test_html_report_renders_l4():
+    fixture = ROOT / "tests" / "fixtures" / "l4"
+    mod = load_module("report_html", SKILL_DIR / "scripts" / "report_html.py")
+    header = mod.parse_header((fixture / "report.md").read_text(encoding="utf-8"))
+    cases = mod.parse_cases((fixture / "report.md").read_text(encoding="utf-8"))
+    sections = mod._parse_sections((fixture / "report.md").read_text(encoding="utf-8"))
+    l4 = json.loads((fixture / "l4-summary.json").read_text(encoding="utf-8"))
+    html = mod.render_html(header, cases, sections, [], l4)
+    assert "L4 端到端（Midscene）" in html
+    assert "L4-DEMO-001" in html
+    assert "l4/midscene/report.html" in html
+    assert "shots/demo.png" in html
+    assert "http://" not in html and "https://" not in html
+
+
+def test_html_report_cli_accepts_l4():
+    fixture = ROOT / "tests" / "fixtures" / "l4"
+    with tempfile.TemporaryDirectory() as tmp:
+        out = pathlib.Path(tmp) / "report.html"
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-X",
+                "utf8",
+                str(SKILL_DIR / "scripts" / "report_html.py"),
+                "--report",
+                str(fixture / "report.md"),
+                "--cases",
+                str(fixture / "cases.md"),
+                "--l4",
+                str(fixture / "l4-summary.json"),
+                "--out",
+                str(out),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
+        )
+        assert result.returncode == 0, result.stderr
+        html = out.read_text(encoding="utf-8")
+        assert "L4 端到端（Midscene）" in html
+        assert "http://" not in html and "https://" not in html
+
+
+def test_l4_summary_normalizes_and_redacts():
+    fixture = ROOT / "tests" / "fixtures" / "l4"
+    mod = load_module("l4_summary", SKILL_DIR / "scripts" / "l4_summary.py")
+    secret = "sk-test-secret-1234"
+    summary = mod.build_summary(
+        fixture / "l4",
+        fixture / "suite.json",
+        secrets={"MIDSCENE_MODEL_API_KEY": secret},
+        exit_code=0,
+    )
+    assert summary["counts"] == {"total": 1, "passed": 1, "failed": 0, "skipped": 0}
+    assert summary["cases"][0]["caseId"] == "L4-DEMO-001"
+    assert summary["cases"][0]["unmapped"] is False
+    assert summary["cases"][0]["status"] == "passed"
+    assert summary["redacted"] == ["MIDSCENE_MODEL_API_KEY"]
+    assert secret not in json.dumps(summary, ensure_ascii=False)
 
 
 def test_bug_report_help():

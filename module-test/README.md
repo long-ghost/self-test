@@ -26,6 +26,7 @@ powershell -NoProfile -File "$HOME/.codebuddy/skills/module-test/scripts/check-u
 ## 关键约束
 
 - L2/L3 缺少项目适配层或账号表会停下并提示补齐。
+- L4 另需 Node ≥20.19 + pnpm + 全局 runner + 模型 Key + `e2e/midscene/suite.json`，缺一即停；AI 断言按 M3，数值/权限需 M1/M2 交叉核验。
 - 需求冲突必须由用户裁决，确认后才冻结用例。
 - 能力内可测项不得写进「未覆盖」；未覆盖必须留四要素证据。
 - 测试期间业务仓库只读；写库必须复原。
