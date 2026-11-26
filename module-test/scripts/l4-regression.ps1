@@ -11,6 +11,7 @@ param(
     [string]$Case = '',
     [string]$Tag = '',
     [string[]]$Secrets = @(),
+    [switch]$Authorize,
     [switch]$DryRun,
     [switch]$UpdateSuite,
     [string]$RepoRoot = (Get-Location).Path
@@ -100,6 +101,7 @@ try {
             foreach ($secret in $Secrets) {
                 if (-not [string]::IsNullOrWhiteSpace($secret)) { $childArgs += @('-Secrets', $secret) }
             }
+            if ($Authorize -and -not $DryRun) { $childArgs += '-Authorize' }
             if ($DryRun) { $childArgs += '-DryRun' }
             if ($UpdateSuite) { $childArgs += '-UpdateSuite' }
             $childArgs += @('-RepoRoot', $repo)
