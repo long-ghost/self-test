@@ -1,4 +1,4 @@
-"""L4 Midscene 套件清单工具：collect / upsert / export。
+"""L4 Midscene 套件清单工具：collect / upsert / promote / select / cache-id / explain / export。
 
 套件清单固定为产物根 E2E_ROOT/e2e/midscene/suite.json（默认 <repo>/E2E测试/），一个 YAML 文件只放一条用例。
 不依赖 PyYAML：只解析 cases 列表的 name / tags，其余字段以 suite 为准。
@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -16,7 +17,9 @@ import os
 
 CASE_ID_RE = re.compile(r"^L4-[A-Z0-9]+-\d{3}$")
 STATUSES = ("passed", "failed", "skipped")
+PROMOTE_STATUSES = ("passed", "failed", "skipped", "fixed")
 STATUS_CN = {"passed": "通过", "failed": "失败", "skipped": "跳过"}
+LIFECYCLE_KEYS = ("maturity", "consecutivePasses", "lastFailure", "confirmedBug")
 
 
 def _e2e_root(repo: Path) -> Path:
@@ -145,6 +148,54 @@ def write_suite(path: Path, suite: dict) -> None:
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
+def _module_slug(case_id: str) -> str:
+    """模块码小写：L4-DDASH-001 -> ddash；非法编号回退 l4。"""
+    match = CASE_ID_RE.match(str(case_id))
+    if not match:
+        return "l4"
+    return str(case_id).split("-")[1].lower()
+
+
+def stable_cache_id(repo: Path, suite: dict) -> str:
+    """按 caseId 排序，拼 caseId|file|YAML 字节 sha256，取整体 sha256 前 8 位。
+
+    只读 caseId / file / YAML 文件内容，绝不读 lastStatus / consecutivePasses /
+    maturity 等会被回写的字段，保证执行状态变化不会让 cache id 漂移。
+    """
+    repo = Path(repo).resolve()
+    root = _e2e_root(repo) / "e2e" / "midscene"
+    cases = sorted(
+        [case for case in suite.get("cases", []) if isinstance(case, dict)],
+        key=lambda case: str(case.get("caseId") or ""),
+    )
+    chunks: list[str] = []
+    for case in cases:
+        case_id = str(case.get("caseId") or "")
+        rel = str(case.get("file") or "")
+        yaml_path = (root / rel).resolve()
+        try:
+            raw = yaml_path.read_bytes()
+        except OSError:
+            raw = b""
+        yaml_sha = hashlib.sha256(raw).hexdigest()
+        chunks.append("|".join((case_id, rel, yaml_sha)))
+
+    payload = "\n".join(chunks)
+    sha8 = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:8]
+    slug = _module_slug(cases[0].get("caseId", "")) if cases else "l4"
+    return f"l4-{slug}-{sha8}"
+
+
+def cmd_cache_id(args: argparse.Namespace) -> int:
+    repo = Path(args.repo_root).resolve()
+    root = _e2e_root(repo) / "e2e" / "midscene"
+    suite_path = Path(args.suite).resolve() if args.suite else root / "suite.json"
+    suite = load_suite(suite_path)
+    # stdout 只输出 id 一行，供 PowerShell 捕获；不打印日志。
+    print(stable_cache_id(repo, suite))
+    return 0
+
+
 def _case_files(root: Path) -> list[Path]:
     cases_dir = root / "cases"
     if not cases_dir.is_dir():
@@ -168,6 +219,8 @@ def _entry_defaults(case_id: str, rel: str, parsed: dict, today: str) -> dict:
         "firstSeen": today,
         "lastVerified": "",
         "lastStatus": "",
+        "maturity": "draft",
+        "consecutivePasses": 0,
     }
 
 
@@ -215,7 +268,11 @@ def cmd_collect(args: argparse.Namespace) -> int:
     for entry in sorted(parsed_entries, key=lambda item: item["caseId"]):
         old = existing_by_id.get(entry["caseId"]) or existing_by_file.get(entry["file"])
         if old:
-            for key in ("firstSeen", "lastVerified", "lastStatus", "requirementRef", "criterion", "crossVerifiedBy"):
+            merge_keys = (
+                "firstSeen", "lastVerified", "lastStatus", "requirementRef",
+                "criterion", "crossVerifiedBy",
+            ) + LIFECYCLE_KEYS
+            for key in merge_keys:
                 if key in old and old[key] not in (None, ""):
                     entry[key] = old[key]
             if old.get("file") != entry["file"] or old.get("name") != entry["name"]:
@@ -259,7 +316,42 @@ def cmd_collect(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_upsert(args: argparse.Namespace) -> int:
+def _apply_lifecycle(target: dict, status: str, verified: str, bug_id: str, note: str) -> None:
+    """按 promote 规则回写生命周期字段（confirmed-bug 不自动转正）。"""
+    maturity = str(target.get("maturity") or "draft")
+    if status == "passed":
+        if maturity == "confirmed-bug":
+            # 反目标：确认是 bug 的用例不能被连续 pass 洗白。
+            pass
+        else:
+            count = int(target.get("consecutivePasses") or 0) + 1
+            target["consecutivePasses"] = count
+            if count >= 3:
+                target["maturity"] = "stable"
+    elif status in ("failed", "skipped"):
+        target["consecutivePasses"] = 0
+        if status == "failed":
+            target["lastFailure"] = {
+                "at": verified,
+                "reason": note,
+                "cacheReplan": False,
+            }
+        if status == "failed" and bug_id:
+            target["maturity"] = "confirmed-bug"
+            target["confirmedBug"] = {
+                "at": verified,
+                "bugId": bug_id,
+                "note": note,
+            }
+    elif status == "fixed":
+        # 显式修复转正：回到 candidate，清确认信息，重新计数。
+        target["maturity"] = "candidate"
+        target["consecutivePasses"] = 0
+        target["confirmedBug"] = {}
+
+
+def _promote_write(args: argparse.Namespace) -> int:
+    """promote / upsert 共用的写回逻辑。"""
     suite_path = Path(args.suite).resolve()
     if not suite_path.is_file():
         print(f"ERROR: suite 不存在：{suite_path}", file=sys.stderr)
@@ -269,8 +361,8 @@ def cmd_upsert(args: argparse.Namespace) -> int:
     if target is None:
         print(f"ERROR: suite 中没有用例 {args.case_id}", file=sys.stderr)
         return 1
-    if args.status not in STATUSES:
-        print(f"ERROR: status 只能是 {'/'.join(STATUSES)}", file=sys.stderr)
+    if args.status not in PROMOTE_STATUSES:
+        print(f"ERROR: status 只能是 {'/'.join(PROMOTE_STATUSES)}", file=sys.stderr)
         return 1
     verified = args.date or date.today().isoformat()
     print(f"{args.case_id}: lastStatus={args.status} lastVerified={verified}")
@@ -279,8 +371,103 @@ def cmd_upsert(args: argparse.Namespace) -> int:
         return 0
     target["lastStatus"] = args.status
     target["lastVerified"] = verified
+    bug_id = str(getattr(args, "bug_id", "") or "")
+    note = str(getattr(args, "note", "") or "")
+    _apply_lifecycle(target, args.status, verified, bug_id, note)
     write_suite(suite_path, suite)
     print(f"已写回：{suite_path}")
+    return 0
+
+
+def cmd_promote(args: argparse.Namespace) -> int:
+    return _promote_write(args)
+
+
+def cmd_upsert(args: argparse.Namespace) -> int:
+    print("upsert is deprecated; use promote", file=sys.stderr)
+    return _promote_write(args)
+
+
+def _history_for_case(repo: Path, case_id: str) -> list[dict]:
+    """只读聚合 E2E测试/*/l4/l4-summary.json 中该用例的历史状态。"""
+    repo = Path(repo).resolve()
+    history: list[dict] = []
+    for summary in sorted(_e2e_root(repo).glob("*/l4/l4-summary.json")):
+        try:
+            payload = json.loads(summary.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            continue
+        cases = payload.get("cases", []) if isinstance(payload, dict) else []
+        for case in cases:
+            if isinstance(case, dict) and str(case.get("caseId")) == case_id:
+                history.append({
+                    "runId": str(payload.get("runId") or ""),
+                    "status": str(case.get("status") or ""),
+                })
+                break
+    return history
+
+
+def cmd_explain(args: argparse.Namespace) -> int:
+    repo = Path(args.repo_root).resolve()
+    root = _e2e_root(repo) / "e2e" / "midscene"
+    suite_path = Path(args.suite).resolve() if args.suite else root / "suite.json"
+    suite = load_suite(suite_path)
+    target = next((item for item in suite["cases"] if str(item.get("caseId")) == args.case_id), None)
+    if target is None:
+        print(f"ERROR: suite 中没有用例 {args.case_id}", file=sys.stderr)
+        return 1
+    print(f"用例：{args.case_id}")
+    print(f"生命周期：maturity={target.get('maturity') or 'draft'} "
+          f"consecutivePasses={int(target.get('consecutivePasses') or 0)} "
+          f"lastStatus={target.get('lastStatus') or ''} "
+          f"lastVerified={target.get('lastVerified') or ''}")
+    if target.get("lastFailure"):
+        print(f"最近失败：{target['lastFailure']}")
+    if target.get("confirmedBug"):
+        print(f"确认缺陷：{target['confirmedBug']}")
+    history = _history_for_case(repo, args.case_id)
+    if not history:
+        print("无历史")
+    else:
+        print(f"历史（最近 {min(5, len(history))} 次，共 {len(history)} 次）：")
+        for item in history[-5:]:
+            print(f"  - {item['runId'] or '(无 runId)'}  {item['status']}")
+    return 0
+
+
+def cmd_select(args: argparse.Namespace) -> int:
+    suite_path = Path(args.suite).resolve()
+    if not suite_path.is_file():
+        print(f"ERROR: suite 不存在：{suite_path}", file=sys.stderr)
+        return 1
+    suite = load_suite(suite_path)
+    kind = args.kind
+    if kind not in ("regression", "stable", "bug", "all"):
+        print(f"ERROR: kind 只能是 regression/stable/bug/all", file=sys.stderr)
+        return 1
+
+    def eligible(case: dict) -> bool:
+        maturity = str(case.get("maturity") or "draft")
+        if kind in ("regression", "all"):
+            return maturity in ("stable", "confirmed-bug")
+        if kind == "stable":
+            return maturity == "stable"
+        return maturity == "confirmed-bug"
+
+    selected = {
+        "schemaVersion": 1,
+        "project": suite.get("project", "web"),
+        "module": suite.get("module", ""),
+        "cases": [case for case in suite["cases"] if eligible(case)],
+    }
+    text = json.dumps(selected, ensure_ascii=False, indent=2) + "\n"
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8", newline="\n")
+    else:
+        print(text, end="")
     return 0
 
 
@@ -334,13 +521,42 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--authorize", action="store_true")
     collect.set_defaults(func=cmd_collect)
 
-    upsert = sub.add_parser("upsert", help="更新单条用例执行结果")
+    cache_id = sub.add_parser("cache-id", help="输出稳定 cache id（stdout 只有 id 一行）")
+    cache_id.add_argument("--repo-root", default=".")
+    cache_id.add_argument("--suite", default="")
+    cache_id.set_defaults(func=cmd_cache_id)
+
+    promote = sub.add_parser("promote", help="更新执行结果并推进生命周期")
+    promote.add_argument("--suite", required=True)
+    promote.add_argument("--case-id", required=True)
+    promote.add_argument("--status", required=True, choices=PROMOTE_STATUSES)
+    promote.add_argument("--date", default="")
+    promote.add_argument("--bug-id", default="")
+    promote.add_argument("--note", default="")
+    promote.add_argument("--authorize", action="store_true")
+    promote.set_defaults(func=cmd_promote)
+
+    upsert = sub.add_parser("upsert", help="[deprecated] 用 promote 代替")
     upsert.add_argument("--suite", required=True)
     upsert.add_argument("--case-id", required=True)
-    upsert.add_argument("--status", required=True, choices=STATUSES)
+    upsert.add_argument("--status", required=True, choices=PROMOTE_STATUSES)
     upsert.add_argument("--date", default="")
+    upsert.add_argument("--bug-id", default="")
+    upsert.add_argument("--note", default="")
     upsert.add_argument("--authorize", action="store_true")
     upsert.set_defaults(func=cmd_upsert)
+
+    select = sub.add_parser("select", help="按成熟度筛选回归用例")
+    select.add_argument("--suite", required=True)
+    select.add_argument("--kind", required=True, choices=("regression", "stable", "bug", "all"))
+    select.add_argument("--out", default="")
+    select.set_defaults(func=cmd_select)
+
+    explain = sub.add_parser("explain", help="打印用例生命周期与历史摘要")
+    explain.add_argument("--repo-root", default=".")
+    explain.add_argument("--suite", default="")
+    explain.add_argument("--case-id", required=True)
+    explain.set_defaults(func=cmd_explain)
 
     export = sub.add_parser("export", help="输出十五节可粘贴的 Markdown 表")
     export.add_argument("--suite", required=True)
