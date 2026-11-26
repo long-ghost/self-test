@@ -69,6 +69,34 @@
           "lastStatus": {
             "type": "string",
             "enum": ["passed", "failed", "skipped"]
+          },
+          "maturity": {
+            "type": "string",
+            "enum": ["draft", "candidate", "stable", "confirmed-bug", "retired"],
+            "description": "生命周期状态；缺省视为 draft"
+          },
+          "consecutivePasses": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "连续 pass 次数；失败清零；>=3 自动升 stable（confirmed-bug 除外）"
+          },
+          "lastFailure": {
+            "type": "object",
+            "properties": {
+              "at": { "type": "string", "description": "最近一次失败时间" },
+              "reason": { "type": "string", "description": "失败原因" },
+              "cacheReplan": { "type": "boolean", "description": "true 表示 Midscene 日志出现 stale-replan（读模式 aiAct 重规划）" }
+            },
+            "description": "最近一次失败记录"
+          },
+          "confirmedBug": {
+            "type": "object",
+            "properties": {
+              "at": { "type": "string", "description": "人工确认为真 bug 的时间" },
+              "bugId": { "type": "string", "description": "缺陷编号" },
+              "note": { "type": "string", "description": "备注" }
+            },
+            "description": "人工确认为真 bug 时填写；填了即 maturity=confirmed-bug"
           }
         }
       }
